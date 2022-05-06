@@ -41,6 +41,7 @@ public enum RMAppEventType {
   
   // Source: Container and ResourceTracker
   APP_RUNNING_ON_NODE,
+  APP_LOG_AGG_STATUS_UPDATE,
 
   // Source: RMStateStore
   APP_NEW_SAVED,
