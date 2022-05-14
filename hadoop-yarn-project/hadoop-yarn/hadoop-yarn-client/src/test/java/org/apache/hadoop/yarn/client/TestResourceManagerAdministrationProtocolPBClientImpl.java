@@ -23,7 +23,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.service.Service;
 import org.apache.hadoop.service.Service.STATE;
 import org.apache.hadoop.service.ServiceStateChangeListener;
@@ -61,11 +60,6 @@ import static org.junit.Assert.*;
  * Test ResourceManagerAdministrationProtocolPBClientImpl. Test a methods and the proxy without  logic.
  */
 public class TestResourceManagerAdministrationProtocolPBClientImpl {
-
-  static {
-    DefaultMetricsSystem.setMiniClusterMode(true);
-  }
-
   private static ResourceManager resourceManager;
   private static final Logger LOG = LoggerFactory
           .getLogger(TestResourceManagerAdministrationProtocolPBClientImpl.class);
