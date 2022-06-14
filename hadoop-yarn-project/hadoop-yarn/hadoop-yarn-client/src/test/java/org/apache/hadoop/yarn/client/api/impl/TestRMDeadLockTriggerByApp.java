@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.client.api.impl;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -30,6 +31,7 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.Service.STATE;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.yarn.api.protocolrecords.SubmitApplicationRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -76,53 +78,61 @@ public class TestRMDeadLockTriggerByApp {
   private static final Logger LOG = LoggerFactory
       .getLogger(TestRMDeadLockTriggerByApp.class);
 
-  int interval = 1;
-  int loop = 5000;
-  float checkDeadLockRatio = 2.0f;
-  boolean deadLock = false;
-  String errString = null;
+  private static final int INTERVAL = 1;
+  private static final int LOOP = 5000;
+  private static final float CHECK_DEAD_LOCK_RATIO = 2.0f;
+  private static final int NODE_COUNT = 1;
 
-  Configuration conf = null;
-  MiniYARNCluster yarnCluster = null;
+  private boolean deadLock = false;
+  private String errString = null;
 
-  List<NodeReport> nodeReports = null;
-  ApplicationId appId = null;
-  ApplicationAttemptId attemptId = null;
+  private Configuration conf = null;
+  private MiniYARNCluster yarnCluster = null;
 
-  YarnClient yarnClient = null;
-  AMRMClient<ContainerRequest> amClient = null;
+  private List<NodeReport> nodeReports = null;
+  private ApplicationId appId = null;
+  private ApplicationAttemptId attemptId = null;
 
-  ResourceManager rm;
-  NodeManager nm;
-  int nodeCount = 1;
+  private YarnClient yarnClient = null;
+  private AMRMClient<ContainerRequest> amClient = null;
+
+  private ResourceManager rm;
+  private NodeManager nm;
+
+  // thread for allocate container
+  private Thread allocateThread = new AllocateTread();
+
+  // thread for add log aggregation report
+  private Thread addLogAggReportThread = new AddLogAggregationReportThread();
+
+  // thread for get application report
+  private Thread getAppReportThread = new GetApplicationReportThread();
 
   @Before
   public void setup() throws Exception {
-    conf = new YarnConfiguration();
-    createClusterAndStartApplication(conf);
+    createClusterAndStartApplication();
   }
 
-  void createClusterAndStartApplication(Configuration conf)
+  void createClusterAndStartApplication()
       throws Exception {
-    // start minicluster
-    this.conf = conf;
+    this.conf = new YarnConfiguration();
     conf.set(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class.getName());
     conf.setInt(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB, 512);
     conf.setLong(YarnConfiguration.NM_LOG_RETAIN_SECONDS, 1);
     conf.setInt(
         YarnConfiguration.NM_OPPORTUNISTIC_CONTAINERS_MAX_QUEUE_LENGTH, 10);
     conf.setBoolean(YarnConfiguration.LOG_AGGREGATION_ENABLED, true);
-    conf.setInt(YarnConfiguration.NM_VCORES, loop);
-    conf.setInt(YarnConfiguration.YARN_MINICLUSTER_NM_PMEM_MB, 512 * loop);
-    conf.setInt(YarnConfiguration.RM_NM_HEARTBEAT_INTERVAL_MS, this.interval);
+    conf.setInt(YarnConfiguration.NM_VCORES, LOOP);
+    conf.setInt(YarnConfiguration.YARN_MINICLUSTER_NM_PMEM_MB, 512 * LOOP);
+    conf.setInt(YarnConfiguration.RM_NM_HEARTBEAT_INTERVAL_MS, this.INTERVAL);
 
-    yarnCluster = new MiniYARNCluster(
-        TestAMRMClient.class.getName(), nodeCount, 1, 1);
+    this.yarnCluster = new MiniYARNCluster(
+        TestAMRMClient.class.getName(), NODE_COUNT, 1, 1);
     yarnCluster.init(conf);
     yarnCluster.start();
 
     // start rm client
-    yarnClient = YarnClient.createYarnClient();
+    this.yarnClient = YarnClient.createYarnClient();
     yarnClient.init(conf);
     yarnClient.start();
 
@@ -130,18 +140,18 @@ public class TestRMDeadLockTriggerByApp {
     assertTrue("All node managers did not connect to the RM within the "
             + "allotted 5-second timeout",
         yarnCluster.waitForNodeManagersToConnect(5000L));
-    nodeReports = yarnClient.getNodeReports(NodeState.RUNNING);
+    this.nodeReports = yarnClient.getNodeReports(NodeState.RUNNING);
     assertEquals("Not all node managers were reported running",
-        nodeCount, nodeReports.size());
+        NODE_COUNT, nodeReports.size());
 
     // get rm and nm info
-    rm = yarnCluster.getResourceManager(0);
-    nm = yarnCluster.getNodeManager(0);
+    this.rm = yarnCluster.getResourceManager(0);
+    this.nm = yarnCluster.getNodeManager(0);
 
     // submit new app
     ApplicationSubmissionContext appContext =
         yarnClient.createApplication().getApplicationSubmissionContext();
-    appId = appContext.getApplicationId();
+    this.appId = appContext.getApplicationId();
     // set the application name
     appContext.setApplicationName("Test");
     // Set the priority for the application master
@@ -167,23 +177,24 @@ public class TestRMDeadLockTriggerByApp {
     yarnClient.submitApplication(appContext);
 
     // wait for app to start
-    RMAppAttempt appAttempt = null;
-    while (true) {
-      ApplicationReport appReport = yarnClient.getApplicationReport(appId);
-      if (appReport.getYarnApplicationState() ==
-          YarnApplicationState.ACCEPTED) {
-        attemptId = appReport.getCurrentApplicationAttemptId();
-        appAttempt =
-            yarnCluster.getResourceManager().getRMContext().getRMApps()
-                .get(attemptId.getApplicationId()).getCurrentAppAttempt();
-        while (true) {
+    GenericTestUtils.waitFor(() -> {
+      try {
+        ApplicationReport appReport = yarnClient.getApplicationReport(appId);
+        if (appReport.getYarnApplicationState()
+            == YarnApplicationState.ACCEPTED) {
+          this.attemptId = appReport.getCurrentApplicationAttemptId();
+          RMAppAttempt appAttempt = rm.getRMContext().getRMApps()
+              .get(attemptId.getApplicationId()).getCurrentAppAttempt();
           if (appAttempt.getAppAttemptState() == RMAppAttemptState.LAUNCHED) {
-            break;
+            return true;
           }
         }
-        break;
+      } catch (Exception e) {
+        fail("Application launch failed.");
       }
-    }
+      return false;
+    }, 1000, 10000);
+
     // Just dig into the ResourceManager and get the AMRMToken just for the sake
     // of testing.
     UserGroupInformation.setLoginUser(UserGroupInformation
@@ -191,12 +202,14 @@ public class TestRMDeadLockTriggerByApp {
 
     // emulate RM setup of AMRM token in credentials by adding the token
     // *before* setting the token service
+    RMAppAttempt appAttempt = rm.getRMContext().getRMApps()
+        .get(attemptId.getApplicationId()).getCurrentAppAttempt();
     UserGroupInformation.getCurrentUser().addToken(appAttempt.getAMRMToken());
     appAttempt.getAMRMToken().setService(
         ClientRMProxy.getAMRMTokenService(conf));
 
     // create AMRMClient
-    amClient = AMRMClient.createAMRMClient();
+    this.amClient = AMRMClient.createAMRMClient();
     amClient.init(conf);
     amClient.start();
     amClient.registerApplicationMaster("Host", 10000, "");
@@ -204,15 +217,30 @@ public class TestRMDeadLockTriggerByApp {
 
   @After
   public void teardown() throws YarnException, IOException {
+    if (allocateThread != null) {
+      allocateThread.interrupt();
+      allocateThread = null;
+    }
+    if (addLogAggReportThread != null) {
+      addLogAggReportThread.interrupt();
+      addLogAggReportThread = null;
+    }
+    if (getAppReportThread != null) {
+      getAppReportThread.interrupt();
+      getAppReportThread = null;
+    }
+
     if (yarnClient != null && yarnClient.getServiceState() == STATE.STARTED) {
       yarnClient.stop();
     }
+    this.yarnClient = null;
 
     if (amClient != null && amClient.getServiceState() == STATE.STARTED) {
       amClient.stop();
     }
+    this.amClient = null;
 
-    // Avoid the EventHandlingThread struck forever
+    // Avoid the EventHandlingThread stuck forever
     if (deadLock) {
       LOG.info("Found dead lock, stop EventHandlingThread manually!");
       ((AsyncDispatcher) rm.getRMContext().getDispatcher())
@@ -221,20 +249,11 @@ public class TestRMDeadLockTriggerByApp {
     if (yarnCluster != null && yarnCluster.getServiceState() == STATE.STARTED) {
       yarnCluster.stop();
     }
+    this.yarnCluster = null;
   }
 
   @Test(timeout = 60000)
   public void TestRMDeadLockTriggerByApp() throws InterruptedException {
-
-    // thread for allocate container
-    Thread allocateThread = new AllocateTread();
-
-    // thread for add log aggregation report
-    Thread addLogAggReportThread = new AddLogAggregationReportThread();
-
-    // thread for get application report
-    Thread getAppReportThread = new GetApplicationReportThread();
-
     // start all thread
     allocateThread.start();
     addLogAggReportThread.start();
@@ -242,30 +261,24 @@ public class TestRMDeadLockTriggerByApp {
 
     this.deadLock = checkAsyncDispatcherDeadLock();
     Assert.assertFalse("There is dead lock!", deadLock);
-
-    // join all thread
-    allocateThread.join();
-    addLogAggReportThread.join();
-    getAppReportThread.join();
-
     Assert.assertNull(errString);
   }
 
   private boolean checkAsyncDispatcherDeadLock() throws InterruptedException {
     Event lastEvent = null;
-    Event currentEvent = null;
+    Event currentEvent;
     int counter = 0;
-    for (int i = 0; i < loop * checkDeadLockRatio; i++) {
+    for (int i = 0; i < LOOP * CHECK_DEAD_LOCK_RATIO; i++) {
       currentEvent = ((AsyncDispatcher) rm.getRmDispatcher()).getHeadEvent();
       if (currentEvent != null && (currentEvent == lastEvent)) {
-        if (counter++ > loop * checkDeadLockRatio / 2) {
+        if (counter++ > LOOP * CHECK_DEAD_LOCK_RATIO / 2) {
           return true;
         }
       } else {
         counter = 0;
         lastEvent = currentEvent;
       }
-      Thread.sleep(interval);
+      Thread.sleep(INTERVAL);
     }
     return false;
   }
@@ -278,7 +291,7 @@ public class TestRMDeadLockTriggerByApp {
           .getAppAttempts().get(attemptId).getMasterContainer().getId();
       ContainerRequest request = setupContainerAskForRM();
       try {
-        for (int i = 0; i < loop; i++) {
+        for (int i = 0; i < LOOP; i++) {
           amClient.addContainerRequest(request);
           for (ContainerId containerId : nm.getNMContext().getContainers()
               .keySet()) {
@@ -288,7 +301,7 @@ public class TestRMDeadLockTriggerByApp {
             }
           }
           amClient.allocate(0.1f);
-          Thread.sleep(interval);
+          Thread.sleep(INTERVAL);
         }
       } catch (Throwable t) {
         errString = t.getMessage();
@@ -304,11 +317,11 @@ public class TestRMDeadLockTriggerByApp {
       LogAggregationReport report = LogAggregationReport
           .newInstance(appId, LogAggregationStatus.RUNNING, "");
       try {
-        for (int i = 0; i < loop; i++) {
+        for (int i = 0; i < LOOP; i++) {
           if (nm.getNMContext().getLogAggregationStatusForApps().size() == 0) {
             nm.getNMContext().getLogAggregationStatusForApps().add(report);
           }
-          Thread.sleep(interval);
+          Thread.sleep(INTERVAL);
         }
       } catch (Throwable t) {
         errString = t.getMessage();
@@ -322,9 +335,9 @@ public class TestRMDeadLockTriggerByApp {
     @Override
     public void run() {
       try {
-        for (int i = 0; i < loop; i++) {
+        for (int i = 0; i < LOOP; i++) {
           yarnClient.getApplicationReport(appId);
-          Thread.sleep(interval);
+          Thread.sleep(INTERVAL);
         }
       } catch (Throwable t) {
         errString = t.getMessage();
