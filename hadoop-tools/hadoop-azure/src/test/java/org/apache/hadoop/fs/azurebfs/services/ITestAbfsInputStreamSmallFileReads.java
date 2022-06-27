@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem;
+import org.apache.hadoop.fs.azurebfs.utils.TracingContext;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -188,7 +189,7 @@ public class ITestAbfsInputStreamSmallFileReads extends ITestAbfsInputStream {
       byte[] buffer = new byte[length];
       int bytesRead = iStream.read(buffer, 0, length);
       assertEquals(bytesRead, length);
-      assertContentReadCorrectly(fileContent, seekPos, length, buffer);
+      assertContentReadCorrectly(fileContent, seekPos, length, buffer, testFilePath);
       AbfsInputStream abfsInputStream = (AbfsInputStream) iStream
           .getWrappedStream();
 
@@ -198,16 +199,16 @@ public class ITestAbfsInputStreamSmallFileReads extends ITestAbfsInputStream {
       int expectedLimit, expectedFCursor;
       int expectedBCursor;
       if (conf.readSmallFilesCompletely() && smallFile) {
-        assertBuffersAreEqual(fileContent, abfsInputStream.getBuffer(), conf);
+        assertBuffersAreEqual(fileContent, abfsInputStream.getBuffer(), conf, testFilePath);
         expectedFCursor = fileContentLength;
         expectedLimit = fileContentLength;
         expectedBCursor = seekPos + length;
       } else {
         if ((seekPos == 0)) {
-          assertBuffersAreEqual(fileContent, abfsInputStream.getBuffer(), conf);
+          assertBuffersAreEqual(fileContent, abfsInputStream.getBuffer(), conf, testFilePath);
         } else {
           assertBuffersAreNotEqual(fileContent, abfsInputStream.getBuffer(),
-              conf);
+              conf, testFilePath);
         }
         expectedBCursor = length;
         expectedFCursor = (fileContentLength < (seekPos + readBufferSize))
@@ -251,14 +252,15 @@ public class ITestAbfsInputStreamSmallFileReads extends ITestAbfsInputStream {
           .doReturn(10)
           .doCallRealMethod()
           .when(abfsInputStream)
-          .readRemote(anyLong(), any(), anyInt(), anyInt());
+          .readRemote(anyLong(), any(), anyInt(), anyInt(),
+              any(TracingContext.class));
 
       iStream = new FSDataInputStream(abfsInputStream);
       seek(iStream, seekPos);
       byte[] buffer = new byte[length];
       int bytesRead = iStream.read(buffer, 0, length);
       assertEquals(bytesRead, length);
-      assertContentReadCorrectly(fileContent, seekPos, length, buffer);
+      assertContentReadCorrectly(fileContent, seekPos, length, buffer, testFilePath);
       assertEquals(fileContent.length, abfsInputStream.getFCursor());
       assertEquals(fileContent.length,
           abfsInputStream.getFCursorAfterLastRead());
@@ -301,7 +303,8 @@ public class ITestAbfsInputStreamSmallFileReads extends ITestAbfsInputStream {
           .doReturn(secondReturnSize)
           .doCallRealMethod()
           .when(abfsInputStream)
-          .readRemote(anyLong(), any(), anyInt(), anyInt());
+          .readRemote(anyLong(), any(), anyInt(), anyInt(),
+              any(TracingContext.class));
 
       iStream = new FSDataInputStream(abfsInputStream);
       seek(iStream, seekPos);

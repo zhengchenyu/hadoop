@@ -30,7 +30,6 @@ import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.AccessTimeParam
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.AclPermissionParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.BlockSizeParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.DataParam;
-import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.DeleteSkipTrashParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.DestinationParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.ECPolicyParam;
 import org.apache.hadoop.fs.http.server.HttpFSParametersProvider.FilterParam;
@@ -451,6 +450,24 @@ public class HttpFSServer {
       response = Response.ok(js).type(MediaType.APPLICATION_JSON).build();
       break;
     }
+    case GETSNAPSHOTDIFFLISTING: {
+      String oldSnapshotName = params.get(OldSnapshotNameParam.NAME,
+          OldSnapshotNameParam.class);
+      String snapshotName = params.get(SnapshotNameParam.NAME,
+          SnapshotNameParam.class);
+      String snapshotDiffStartPath = params
+          .get(HttpFSParametersProvider.SnapshotDiffStartPathParam.NAME,
+              HttpFSParametersProvider.SnapshotDiffStartPathParam.class);
+      Integer snapshotDiffIndex = params.get(HttpFSParametersProvider.SnapshotDiffIndexParam.NAME,
+          HttpFSParametersProvider.SnapshotDiffIndexParam.class);
+      FSOperations.FSGetSnapshotDiffListing command =
+          new FSOperations.FSGetSnapshotDiffListing(path, oldSnapshotName,
+              snapshotName, snapshotDiffStartPath, snapshotDiffIndex);
+      String js = fsExecute(user, command);
+      AUDIT_LOG.info("[{}]", path);
+      response = Response.ok(js).type(MediaType.APPLICATION_JSON).build();
+      break;
+    }
     case GETSNAPSHOTTABLEDIRECTORYLIST: {
       FSOperations.FSGetSnapshottableDirListing command =
           new FSOperations.FSGetSnapshottableDirListing();
@@ -549,13 +566,9 @@ public class HttpFSServer {
       case DELETE: {
         Boolean recursive =
           params.get(RecursiveParam.NAME,  RecursiveParam.class);
-        Boolean skipTrashParam = params.get(DeleteSkipTrashParam.NAME,
-            DeleteSkipTrashParam.class);
-        boolean skipTrash = skipTrashParam != null && skipTrashParam;
-        AUDIT_LOG.info("[{}] recursive [{}] skipTrash [{}]", path, recursive,
-            skipTrash);
+        AUDIT_LOG.info("[{}] recursive [{}]", path, recursive);
         FSOperations.FSDelete command =
-          new FSOperations.FSDelete(path, recursive, skipTrash);
+          new FSOperations.FSDelete(path, recursive);
         JSONObject json = fsExecute(user, command);
         response = Response.ok(json).type(MediaType.APPLICATION_JSON).build();
         break;

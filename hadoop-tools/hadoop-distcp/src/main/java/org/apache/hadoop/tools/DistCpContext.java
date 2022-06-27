@@ -175,6 +175,10 @@ public class DistCpContext {
     return options.shouldUseIterator();
   }
 
+  public boolean shouldUpdateRoot() {
+    return options.shouldUpdateRoot();
+  }
+
   public final boolean splitLargeFile() {
     return options.getBlocksPerChunk() > 0;
   }
@@ -204,7 +208,7 @@ public class DistCpContext {
     return options.toString() +
         ", sourcePaths=" + sourcePaths +
         ", targetPathExists=" + targetPathExists +
-        ", preserveRawXattrs" + preserveRawXattrs;
+        ", preserveRawXattrs=" + preserveRawXattrs;
   }
 
 }

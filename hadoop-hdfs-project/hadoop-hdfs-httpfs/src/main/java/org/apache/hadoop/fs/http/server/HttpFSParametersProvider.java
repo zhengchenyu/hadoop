@@ -27,6 +27,7 @@ import org.apache.hadoop.lib.service.FileSystemAccess;
 import org.apache.hadoop.lib.wsrs.BooleanParam;
 import org.apache.hadoop.lib.wsrs.EnumParam;
 import org.apache.hadoop.lib.wsrs.EnumSetParam;
+import org.apache.hadoop.lib.wsrs.IntegerParam;
 import org.apache.hadoop.lib.wsrs.LongParam;
 import org.apache.hadoop.lib.wsrs.Param;
 import org.apache.hadoop.lib.wsrs.ParametersProvider;
@@ -81,8 +82,7 @@ public class HttpFSParametersProvider extends ParametersProvider {
         new Class[]{ReplicationParam.class});
     PARAMS_DEF.put(Operation.SETTIMES,
         new Class[]{ModifiedTimeParam.class, AccessTimeParam.class});
-    PARAMS_DEF.put(Operation.DELETE, new Class[]{RecursiveParam.class,
-        DeleteSkipTrashParam.class});
+    PARAMS_DEF.put(Operation.DELETE, new Class[]{RecursiveParam.class});
     PARAMS_DEF.put(Operation.SETACL, new Class[]{AclPermissionParam.class});
     PARAMS_DEF.put(Operation.REMOVEACL, new Class[]{});
     PARAMS_DEF.put(Operation.MODIFYACLENTRIES,
@@ -113,6 +113,9 @@ public class HttpFSParametersProvider extends ParametersProvider {
     PARAMS_DEF.put(Operation.RENAMESNAPSHOT,
             new Class[] {OldSnapshotNameParam.class,
                 SnapshotNameParam.class});
+    PARAMS_DEF.put(Operation.GETSNAPSHOTDIFFLISTING,
+        new Class[] {OldSnapshotNameParam.class, SnapshotNameParam.class,
+            SnapshotDiffStartPathParam.class, SnapshotDiffIndexParam.class});
     PARAMS_DEF.put(Operation.GETSNAPSHOTDIFF,
         new Class[] {OldSnapshotNameParam.class,
             SnapshotNameParam.class});
@@ -239,25 +242,6 @@ public class HttpFSParametersProvider extends ParametersProvider {
      * Constructor.
      */
     public RecursiveParam() {
-      super(NAME, false);
-    }
-  }
-
-  /**
-   * Class for delete's skipTrash parameter.
-   */
-  @InterfaceAudience.Private
-  public static class DeleteSkipTrashParam extends BooleanParam {
-
-    /**
-     * Parameter name.
-     */
-    public static final String NAME = HttpFSFileSystem.SKIP_TRASH_PARAM;
-
-    /**
-     * Constructor.
-     */
-    public DeleteSkipTrashParam() {
       super(NAME, false);
     }
   }
@@ -687,6 +671,44 @@ public class HttpFSParametersProvider extends ParametersProvider {
     public OldSnapshotNameParam() {
       super(NAME, null);
     }
+  }
+
+  /**
+   * Class for SnapshotDiffStartPath parameter.
+   */
+  public static class SnapshotDiffStartPathParam extends StringParam {
+
+    /**
+     * Parameter name.
+     */
+    public static final String NAME = HttpFSFileSystem.SNAPSHOT_DIFF_START_PATH;
+
+    /**
+     * Constructor.
+     */
+    public SnapshotDiffStartPathParam() {
+      super(NAME, "");
+    }
+
+  }
+
+  /**
+   * Class for SnapshotDiffStartPath parameter.
+   */
+  public static class SnapshotDiffIndexParam extends IntegerParam {
+
+    /**
+     * Parameter name.
+     */
+    public static final String NAME = HttpFSFileSystem.SNAPSHOT_DIFF_INDEX;
+
+    /**
+     * Constructor.
+     */
+    public SnapshotDiffIndexParam() {
+      super(NAME, null);
+    }
+
   }
 
   /**

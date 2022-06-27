@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.fs.audit.AuditStatisticNames;
 import org.apache.hadoop.fs.s3a.statistics.StatisticTypeEnum;
 import org.apache.hadoop.fs.statistics.StoreStatisticNames;
 import org.apache.hadoop.fs.statistics.StreamStatisticNames;
@@ -30,6 +31,7 @@ import static org.apache.hadoop.fs.s3a.statistics.StatisticTypeEnum.TYPE_COUNTER
 import static org.apache.hadoop.fs.s3a.statistics.StatisticTypeEnum.TYPE_DURATION;
 import static org.apache.hadoop.fs.s3a.statistics.StatisticTypeEnum.TYPE_GAUGE;
 import static org.apache.hadoop.fs.s3a.statistics.StatisticTypeEnum.TYPE_QUANTILE;
+import static org.apache.hadoop.fs.statistics.StoreStatisticNames.SUFFIX_FAILURES;
 
 /**
  * Statistic which are collected in S3A.
@@ -52,6 +54,10 @@ public enum Statistic {
   ACTION_HTTP_HEAD_REQUEST(
       StoreStatisticNames.ACTION_HTTP_HEAD_REQUEST,
       "HEAD request.",
+      TYPE_DURATION),
+  ACTION_FILE_OPENED(
+      StoreStatisticNames.ACTION_FILE_OPENED,
+      "File opened.",
       TYPE_DURATION),
   ACTION_HTTP_GET_REQUEST(
       StoreStatisticNames.ACTION_HTTP_GET_REQUEST,
@@ -93,14 +99,22 @@ public enum Statistic {
       StoreStatisticNames.OP_ABORT,
       "Calls of abort()",
       TYPE_DURATION),
+  INVOCATION_ACCESS(
+      StoreStatisticNames.OP_ACCESS,
+      "Calls of access()",
+      TYPE_DURATION),
   INVOCATION_COPY_FROM_LOCAL_FILE(
       StoreStatisticNames.OP_COPY_FROM_LOCAL_FILE,
       "Calls of copyFromLocalFile()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_CREATE(
       StoreStatisticNames.OP_CREATE,
       "Calls of create()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
+  INVOCATION_CREATE_FILE(
+      StoreStatisticNames.OP_CREATE_FILE,
+      "Calls of createFile()",
+      TYPE_DURATION),
   INVOCATION_CREATE_NON_RECURSIVE(
       StoreStatisticNames.OP_CREATE_NON_RECURSIVE,
       "Calls of createNonRecursive()",
@@ -108,35 +122,39 @@ public enum Statistic {
   INVOCATION_DELETE(
       StoreStatisticNames.OP_DELETE,
       "Calls of delete()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_EXISTS(
       StoreStatisticNames.OP_EXISTS,
       "Calls of exists()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
+  INVOCATION_GET_CONTENT_SUMMARY(
+      StoreStatisticNames.OP_GET_CONTENT_SUMMARY,
+      "Calls of getContentSummary()",
+      TYPE_DURATION),
   INVOCATION_GET_DELEGATION_TOKEN(
       StoreStatisticNames.OP_GET_DELEGATION_TOKEN,
       "Calls of getDelegationToken()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_GET_FILE_CHECKSUM(
       StoreStatisticNames.OP_GET_FILE_CHECKSUM,
       "Calls of getFileChecksum()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_GET_FILE_STATUS(
       StoreStatisticNames.OP_GET_FILE_STATUS,
       "Calls of getFileStatus()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_GLOB_STATUS(
       StoreStatisticNames.OP_GLOB_STATUS,
       "Calls of globStatus()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_IS_DIRECTORY(
       StoreStatisticNames.OP_IS_DIRECTORY,
       "Calls of isDirectory()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_IS_FILE(
       StoreStatisticNames.OP_IS_FILE,
       "Calls of isFile()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_HFLUSH(
       StoreStatisticNames.OP_HFLUSH,
       "Calls of hflush()",
@@ -148,7 +166,7 @@ public enum Statistic {
   INVOCATION_LIST_FILES(
       StoreStatisticNames.OP_LIST_FILES,
       "Calls of listFiles()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_LIST_LOCATED_STATUS(
       StoreStatisticNames.OP_LIST_LOCATED_STATUS,
       "Calls of listLocatedStatus()",
@@ -156,19 +174,23 @@ public enum Statistic {
   INVOCATION_LIST_STATUS(
       StoreStatisticNames.OP_LIST_STATUS,
       "Calls of listStatus()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_MKDIRS(
       StoreStatisticNames.OP_MKDIRS,
       "Calls of mkdirs()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   INVOCATION_OPEN(
       StoreStatisticNames.OP_OPEN,
       "Calls of open()",
       TYPE_COUNTER),
+  INVOCATION_OPENFILE(
+      StoreStatisticNames.OP_OPENFILE,
+      "Calls of openFile()",
+      TYPE_COUNTER),
   INVOCATION_RENAME(
       StoreStatisticNames.OP_RENAME,
       "Calls of rename()",
-      TYPE_COUNTER),
+      TYPE_DURATION),
 
   /* The XAttr API metrics are all durations */
   INVOCATION_XATTR_GET_MAP(
@@ -215,15 +237,15 @@ public enum Statistic {
   OBJECT_MULTIPART_UPLOAD_INITIATED(
       StoreStatisticNames.OBJECT_MULTIPART_UPLOAD_INITIATED,
       "Object multipart upload initiated",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   OBJECT_MULTIPART_UPLOAD_ABORTED(
       StoreStatisticNames.OBJECT_MULTIPART_UPLOAD_ABORTED,
       "Object multipart upload aborted",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   OBJECT_PUT_REQUESTS(
       StoreStatisticNames.OBJECT_PUT_REQUEST,
       "Object put/multipart upload count",
-      TYPE_COUNTER),
+      TYPE_DURATION),
   OBJECT_PUT_REQUESTS_COMPLETED(
       StoreStatisticNames.OBJECT_PUT_REQUEST_COMPLETED,
       "Object put/multipart upload completed count",
@@ -286,6 +308,15 @@ public enum Statistic {
       StreamStatisticNames.STREAM_READ_OPERATIONS,
       "Count of read() operations in an input stream",
       TYPE_COUNTER),
+  STREAM_READ_REMOTE_STREAM_ABORTED(
+      StreamStatisticNames.STREAM_READ_REMOTE_STREAM_ABORTED,
+      "Duration of aborting a remote stream during stream IO",
+      TYPE_DURATION),
+  STREAM_READ_REMOTE_STREAM_CLOSED(
+      StreamStatisticNames.STREAM_READ_REMOTE_STREAM_DRAINED,
+      "Duration of closing a remote stream during stream IO",
+      TYPE_DURATION),
+
   STREAM_READ_OPERATIONS_INCOMPLETE(
       StreamStatisticNames.STREAM_READ_OPERATIONS_INCOMPLETE,
       "Count of incomplete read() operations in an input stream",
@@ -421,7 +452,7 @@ public enum Statistic {
       "Count of bytes uploaded duing commit operations",
       TYPE_COUNTER),
   COMMITTER_COMMITS_FAILED(
-      "committer_commits"+ StoreStatisticNames.SUFFIX_FAILURES,
+      "committer_commits"+ SUFFIX_FAILURES,
       "Count of commits failed",
       TYPE_COUNTER),
   COMMITTER_COMMITS_ABORTED(
@@ -432,10 +463,19 @@ public enum Statistic {
       "committer_commits_reverted",
       "Count of commits reverted",
       TYPE_COUNTER),
+  COMMITTER_LOAD_SINGLE_PENDING_FILE(
+      "committer_load_single_pending_file",
+      "Duration to load a single pending file in task commit",
+      TYPE_DURATION),
   COMMITTER_MAGIC_FILES_CREATED(
       "committer_magic_files_created",
       "Count of files created under 'magic' paths",
       TYPE_COUNTER),
+
+  COMMITTER_MAGIC_MARKER_PUT(
+      "committer_magic_marker_put",
+      "Duration Tracking of marker files created under 'magic' paths",
+      TYPE_DURATION),
   COMMITTER_MATERIALIZE_FILE(
       "committer_materialize_file",
       "Duration Tracking of time to materialize a file in job commit",
@@ -445,48 +485,10 @@ public enum Statistic {
       "Duration Tracking of files uploaded from a local staging path",
       TYPE_DURATION),
 
-  /* S3guard stats */
-  S3GUARD_METADATASTORE_PUT_PATH_REQUEST(
-      "s3guard_metadatastore_put_path_request",
-      "S3Guard metadata store put one metadata path request",
-      TYPE_COUNTER),
-  S3GUARD_METADATASTORE_PUT_PATH_LATENCY(
-      "s3guard_metadatastore_put_path_latency",
-      "S3Guard metadata store put one metadata path latency",
-      TYPE_QUANTILE),
-  S3GUARD_METADATASTORE_INITIALIZATION(
-      "s3guard_metadatastore_initialization",
-      "S3Guard metadata store initialization times",
-      TYPE_COUNTER),
-  S3GUARD_METADATASTORE_RECORD_DELETES(
-      "s3guard_metadatastore_record_deletes",
-      "S3Guard metadata store records deleted",
-      TYPE_COUNTER),
-  S3GUARD_METADATASTORE_RECORD_READS(
-      "s3guard_metadatastore_record_reads",
-      "S3Guard metadata store records read",
-      TYPE_COUNTER),
-  S3GUARD_METADATASTORE_RECORD_WRITES(
-      "s3guard_metadatastore_record_writes",
-      "S3Guard metadata store records written",
-      TYPE_COUNTER),
-  S3GUARD_METADATASTORE_RETRY("s3guard_metadatastore_retry",
-      "S3Guard metadata store retry events",
-      TYPE_COUNTER),
-  S3GUARD_METADATASTORE_THROTTLED("s3guard_metadatastore_throttled",
-      "S3Guard metadata store throttled events",
-      TYPE_COUNTER),
-  S3GUARD_METADATASTORE_THROTTLE_RATE(
-      "s3guard_metadatastore_throttle_rate",
-      "S3Guard metadata store throttle rate",
-      TYPE_QUANTILE),
-  S3GUARD_METADATASTORE_AUTHORITATIVE_DIRECTORIES_UPDATED(
-      "s3guard_metadatastore_authoritative_directories_updated",
-      "S3Guard metadata store authoritative directories updated from S3",
-      TYPE_COUNTER),
-
-
   /* General Store operations */
+  STORE_EXISTS_PROBE(StoreStatisticNames.STORE_EXISTS_PROBE,
+      "Store Existence Probe",
+      TYPE_DURATION),
   STORE_IO_REQUEST(StoreStatisticNames.STORE_IO_REQUEST,
       "requests made of the remote store",
       TYPE_COUNTER),
@@ -538,10 +540,40 @@ public enum Statistic {
       StoreStatisticNames.MULTIPART_UPLOAD_COMPLETED,
       "Multipart Upload Completed",
       TYPE_COUNTER),
+  MULTIPART_UPLOAD_LIST(
+      StoreStatisticNames.MULTIPART_UPLOAD_LIST,
+      "Multipart Upload List",
+      TYPE_DURATION),
   MULTIPART_UPLOAD_STARTED(
       StoreStatisticNames.MULTIPART_UPLOAD_STARTED,
       "Multipart Upload Started",
-      TYPE_COUNTER);
+      TYPE_COUNTER),
+
+  /* Audit statistics. */
+  /* If more are added: update AuditTestSupport to include the new values. */
+  AUDIT_ACCESS_CHECK_FAILURE(
+      AuditStatisticNames.AUDIT_ACCESS_CHECK_FAILURE,
+      "Audit access check was rejected",
+      TYPE_COUNTER),
+  AUDIT_SPAN_CREATION(
+      AuditStatisticNames.AUDIT_SPAN_CREATION,
+      "Audit Span Created",
+      TYPE_COUNTER),
+  AUDIT_FAILURE(
+      AuditStatisticNames.AUDIT_FAILURE,
+      "Audit failure/rejection",
+      TYPE_COUNTER),
+  AUDIT_REQUEST_EXECUTION(
+      AuditStatisticNames.AUDIT_REQUEST_EXECUTION,
+      "AWS request made",
+      TYPE_COUNTER),
+
+  /* Client side encryption gauge */
+  CLIENT_SIDE_ENCRYPTION_ENABLED(
+      "client_side_encryption_enabled",
+      "gauge to indicate if client side encryption is enabled",
+      TYPE_GAUGE
+  );
 
 
   /**

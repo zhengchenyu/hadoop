@@ -18,11 +18,15 @@ package org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.helper;
 
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.AbstractCSQueue;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.AbstractLeafQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.AutoCreatedLeafQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueue;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.ManagedParentQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.ParentQueue;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AutoQueueTemplatePropertiesInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.LeafQueueTemplateInfo.ConfItem;
+
+import java.util.Map;
 
 /**
  * Helper class to describe a queue's type, its creation method and its
@@ -78,7 +82,7 @@ public class CapacitySchedulerInfoHelper {
   }
 
   public static String getQueueType(CSQueue queue) {
-    if (queue instanceof LeafQueue) {
+    if (queue instanceof AbstractLeafQueue) {
       return LEAF_QUEUE;
     } else if (queue instanceof ParentQueue) {
       return PARENT_QUEUE;
@@ -105,5 +109,17 @@ public class CapacitySchedulerInfoHelper {
     } else {
       return AUTO_CREATION_OFF;
     }
+  }
+
+  public static AutoQueueTemplatePropertiesInfo getAutoCreatedTemplate(
+      Map<String, String> templateProperties) {
+    AutoQueueTemplatePropertiesInfo propertiesInfo =
+        new AutoQueueTemplatePropertiesInfo();
+    for (Map.Entry<String, String> e :
+        templateProperties.entrySet()) {
+      propertiesInfo.add(new ConfItem(e.getKey(), e.getValue()));
+    }
+
+    return propertiesInfo;
   }
 }

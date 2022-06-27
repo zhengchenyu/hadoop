@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
+import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.INVALID_TXID;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 
 import java.io.IOException;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.slf4j.Logger;
@@ -40,10 +42,10 @@ import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLog;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLogManifest;
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
+import org.apache.hadoop.util.Lists;
+
+import org.apache.hadoop.classification.VisibleForTesting;
+import org.apache.hadoop.util.Preconditions;
 
 /**
  * Manages a collection of Journals. None of the methods are synchronized, it is
@@ -186,9 +188,11 @@ public class JournalSet implements JournalManager {
   final int minimumRedundantJournals;
 
   private boolean closed;
-  
+  private long lastJournalledTxId;
+
   JournalSet(int minimumRedundantResources) {
     this.minimumRedundantJournals = minimumRedundantResources;
+    lastJournalledTxId = INVALID_TXID;
   }
   
   @Override
@@ -438,6 +442,16 @@ public class JournalSet implements JournalManager {
       super();
     }
 
+    /**
+     * Get the last txId journalled in the stream.
+     * The txId is recorded when FSEditLogOp is written to the journal.
+     * JournalSet tracks the txId uniformly for all underlying streams.
+     */
+    @Override
+    public long getLastJournalledTxId() {
+      return lastJournalledTxId;
+    }
+
     @Override
     public void write(final FSEditLogOp op)
         throws IOException {
@@ -449,6 +463,10 @@ public class JournalSet implements JournalManager {
           }
         }
       }, "write op");
+
+      assert lastJournalledTxId < op.txid : "TxId order violation for op=" +
+        op + ", lastJournalledTxId=" + lastJournalledTxId;
+      lastJournalledTxId = op.txid;
     }
 
     @Override
@@ -659,7 +677,7 @@ public class JournalSet implements JournalManager {
         // storage directory with ancient logs. Clear out any logs we've
         // accumulated so far, and then skip to the next segment of logs
         // after the gap.
-        SortedSet<Long> startTxIds = Sets.newTreeSet(logsByStartTxId.keySet());
+        SortedSet<Long> startTxIds = new TreeSet<>(logsByStartTxId.keySet());
         startTxIds = startTxIds.tailSet(curStartTxId);
         if (startTxIds.isEmpty()) {
           break;

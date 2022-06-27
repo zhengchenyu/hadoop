@@ -35,6 +35,12 @@ import static org.apache.hadoop.fs.s3a.commit.CommitConstants.MAGIC_COMMITTER_EN
 @InterfaceStability.Unstable
 public final class InternalCommitterConstants {
 
+  /**
+   * How long threads in the thread pool stay alive when
+   * idle. Value in seconds: {@value}.
+   */
+  public static final long THREAD_KEEP_ALIVE_TIME = 60L;
+
   private InternalCommitterConstants() {
   }
 
@@ -123,5 +129,11 @@ public final class InternalCommitterConstants {
   public static final String E_NO_SPARK_UUID =
       "Job/task context does not contain a unique ID in "
           + SPARK_WRITE_UUID;
+
+  /**
+   * The MR job ID; copies from MRJobConfig so that it can be
+   * referred to without needing hadoop-mapreduce on the classpath.
+   */
+  public static final String MR_JOB_ID = "mapreduce.job.id";
 
 }

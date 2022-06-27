@@ -35,7 +35,8 @@ import java.util.stream.Collectors;
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.MultiObjectDeleteException;
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.classification.VisibleForTesting;
+import org.apache.hadoop.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,7 +58,6 @@ import org.apache.hadoop.fs.s3a.impl.DirectoryPolicyImpl;
 import org.apache.hadoop.fs.s3a.impl.StoreContext;
 import org.apache.hadoop.fs.s3a.s3guard.S3GuardTool;
 import org.apache.hadoop.fs.shell.CommandFormat;
-import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.util.DurationInfo;
 import org.apache.hadoop.util.ExitUtil;
 
@@ -73,10 +73,7 @@ import static org.apache.hadoop.service.launcher.LauncherExitCodes.EXIT_SUCCESS;
 import static org.apache.hadoop.service.launcher.LauncherExitCodes.EXIT_USAGE;
 
 /**
- * Audit and S3 bucket for directory markers.
- * <p></p>
- * This tool does not go anywhere near S3Guard; its scan bypasses any
- * metastore as we are explicitly looking for marker objects.
+ * Audit an S3 bucket for directory markers.
  */
 @InterfaceAudience.LimitedPrivate("management tools")
 @InterfaceStability.Unstable
@@ -363,7 +360,6 @@ public final class MarkerTool extends S3GuardTool {
 
     // extract the callbacks needed for the rest of the work
     storeContext = fs.createStoreContext();
-    operations = fs.createMarkerToolOperations();
     // filesystem policy.
     // if the -nonauth option is set, this is used to filter
     // out surplus markers from the results.
@@ -417,13 +413,15 @@ public final class MarkerTool extends S3GuardTool {
       minMarkerCount = maxMarkerCount;
       maxMarkerCount = m;
     }
-    ScanResult result = scan(target,
+    // extract the callbacks needed for the rest of the work
+    operations = fs.createMarkerToolOperations(
+        target.toString());
+    return scan(target,
         scanArgs.isDoPurge(),
         minMarkerCount,
         maxMarkerCount,
         scanArgs.getLimit(),
         filterPolicy);
-    return result;
   }
 
   /**
@@ -817,10 +815,9 @@ public final class MarkerTool extends S3GuardTool {
       int end = Math.min(start + deletePageSize, size);
       List<DeleteObjectsRequest.KeyVersion> page = markerKeys.subList(start,
           end);
-      List<Path> undeleted = new ArrayList<>();
       once("Remove S3 Keys",
           tracker.getBasePath().toString(), () ->
-              operations.removeKeys(page, true, undeleted, null, false));
+              operations.removeKeys(page, true));
       summary.deleteRequests++;
       // and move to the start of the next page
       start = end;

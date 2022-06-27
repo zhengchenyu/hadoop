@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
@@ -32,10 +33,10 @@ import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology.NNConf;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology.NSConf;
+import org.apache.hadoop.util.Sets;
 import org.junit.Test;
 
 import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 
 /**
  * Tests datanode refresh namenode list functionality.
@@ -73,13 +74,13 @@ public class TestRefreshNamenodes {
 
       // Ensure a BPOfferService in the datanodes corresponds to
       // a namenode in the cluster
-      Set<InetSocketAddress> nnAddrsFromCluster = Sets.newHashSet();
+      Set<InetSocketAddress> nnAddrsFromCluster = new HashSet<>();
       for (int i = 0; i < 4; i++) {
         assertTrue(nnAddrsFromCluster.add(
             cluster.getNameNode(i).getNameNodeAddress()));
       }
       
-      Set<InetSocketAddress> nnAddrsFromDN = Sets.newHashSet();
+      Set<InetSocketAddress> nnAddrsFromDN = new HashSet<>();
       for (BPOfferService bpos : dn.getAllBpOs()) {
         for (BPServiceActor bpsa : bpos.getBPServiceActors()) {
           assertTrue(nnAddrsFromDN.add(bpsa.getNNSocketAddress()));

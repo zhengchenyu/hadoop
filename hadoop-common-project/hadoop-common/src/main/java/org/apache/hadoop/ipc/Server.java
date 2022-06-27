@@ -65,9 +65,13 @@ import java.util.TimerTask;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
+import java.util.stream.Collectors;
 
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
@@ -125,7 +129,9 @@ import org.apache.hadoop.tracing.TraceScope;
 import org.apache.hadoop.tracing.Tracer;
 import org.apache.hadoop.tracing.TraceUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.classification.VisibleForTesting;
+
+import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.thirdparty.protobuf.ByteString;
 import org.apache.hadoop.thirdparty.protobuf.CodedOutputStream;
 import org.apache.hadoop.thirdparty.protobuf.Message;
@@ -184,8 +190,11 @@ public abstract class Server {
    * e.g., terse exception group for concise logging messages
    */
   static class ExceptionsHandler {
-    private volatile Set<String> terseExceptions = new HashSet<>();
-    private volatile Set<String> suppressedExceptions = new HashSet<>();
+
+    private final Set<String> terseExceptions =
+        ConcurrentHashMap.newKeySet();
+    private final Set<String> suppressedExceptions =
+        ConcurrentHashMap.newKeySet();
 
     /**
      * Add exception classes for which server won't log stack traces.
@@ -193,8 +202,10 @@ public abstract class Server {
      * @param exceptionClass exception classes 
      */
     void addTerseLoggingExceptions(Class<?>... exceptionClass) {
-      // Thread-safe replacement of terseExceptions.
-      terseExceptions = addExceptions(terseExceptions, exceptionClass);
+      terseExceptions.addAll(Arrays
+          .stream(exceptionClass)
+          .map(Class::toString)
+          .collect(Collectors.toSet()));
     }
 
     /**
@@ -203,9 +214,10 @@ public abstract class Server {
      * @param exceptionClass exception classes
      */
     void addSuppressedLoggingExceptions(Class<?>... exceptionClass) {
-      // Thread-safe replacement of suppressedExceptions.
-      suppressedExceptions = addExceptions(
-          suppressedExceptions, exceptionClass);
+      suppressedExceptions.addAll(Arrays
+          .stream(exceptionClass)
+          .map(Class::toString)
+          .collect(Collectors.toSet()));
     }
 
     boolean isTerseLog(Class<?> t) {
@@ -216,23 +228,6 @@ public abstract class Server {
       return suppressedExceptions.contains(t.toString());
     }
 
-    /**
-     * Return a new set containing all the exceptions in exceptionsSet
-     * and exceptionClass.
-     * @return
-     */
-    private static Set<String> addExceptions(
-        final Set<String> exceptionsSet, Class<?>[] exceptionClass) {
-      // Make a copy of the exceptionSet for performing modification
-      final HashSet<String> newSet = new HashSet<>(exceptionsSet);
-
-      // Add all class names into the HashSet
-      for (Class<?> name : exceptionClass) {
-        newSet.add(name.toString());
-      }
-
-      return Collections.unmodifiableSet(newSet);
-    }
   }
 
   
@@ -276,10 +271,10 @@ public abstract class Server {
    * Register a RPC kind and the class to deserialize the rpc request.
    * 
    * Called by static initializers of rpcKind Engines
-   * @param rpcKind
+   * @param rpcKind - input rpcKind.
    * @param rpcRequestWrapperClass - this class is used to deserialze the
    *  the rpc request.
-   *  @param rpcInvoker - use to process the calls on SS.
+   * @param rpcInvoker - use to process the calls on SS.
    */
   
   public static void registerProtocolEngine(RPC.RpcKind rpcKind, 
@@ -338,7 +333,7 @@ public abstract class Server {
     return protocol;
   }
   
-  /** Returns the server instance called under or null.  May be called under
+  /** @return Returns the server instance called under or null.  May be called under
    * {@link #call(Writable, long)} implementations, and under {@link Writable}
    * methods of paramters and return values.  Permits applications to access
    * the server context.*/
@@ -351,7 +346,7 @@ public abstract class Server {
    */
   private static final ThreadLocal<Call> CurCall = new ThreadLocal<Call>();
   
-  /** Get the current call */
+  /** @return Get the current call. */
   @VisibleForTesting
   public static ThreadLocal<Call> getCurCall() {
     return CurCall;
@@ -378,12 +373,22 @@ public abstract class Server {
     return call != null ? call.retryCount : RpcConstants.INVALID_RETRY_COUNT;
   }
 
-  /** Returns the remote side ip address when invoked inside an RPC 
-   *  Returns null incase of an error.
+  /**
+   * @return Returns the remote side ip address when invoked inside an RPC
+   *  Returns null in case of an error.
    */
   public static InetAddress getRemoteIp() {
     Call call = CurCall.get();
-    return (call != null ) ? call.getHostInetAddress() : null;
+    return (call != null) ? call.getHostInetAddress() : null;
+  }
+
+  /**
+   * @return Returns the remote side port when invoked inside an RPC
+   * Returns 0 in case of an error.
+   */
+  public static int getRemotePort() {
+    Call call = CurCall.get();
+    return (call != null) ? call.getRemotePort() : 0;
   }
 
   /**
@@ -413,14 +418,14 @@ public abstract class Server {
   }
 
   /**
-   * Returns the clientId from the current RPC request
+   * @return Returns the clientId from the current RPC request.
    */
   public static byte[] getClientId() {
     Call call = CurCall.get();
     return call != null ? call.clientId : RpcConstants.DUMMY_CLIENT_ID;
   }
-  
-  /** Returns remote address as a string when invoked inside an RPC.
+
+  /** @return Returns remote address as a string when invoked inside an RPC.
    *  Returns null in case of an error.
    */
   public static String getRemoteAddress() {
@@ -442,14 +447,14 @@ public abstract class Server {
     return (call != null) ? call.getProtocol() : null;
   }
 
-  /** Return true if the invocation was through an RPC.
+  /** @return Return true if the invocation was through an RPC.
    */
   public static boolean isRpcInvocation() {
     return CurCall.get() != null;
   }
 
   /**
-   * Return the priority level assigned by call queue to an RPC
+   * @return Return the priority level assigned by call queue to an RPC
    * Returns 0 in case no priority is assigned.
    */
   public static int getPriorityLevel() {
@@ -457,7 +462,7 @@ public abstract class Server {
     return call != null? call.getPriorityLevel() : 0;
   }
 
-  private String bindAddress; 
+  private String bindAddress;
   private int port;                               // port we listen on
   private int handlerCount;                       // number of handler threads
   private int readThreads;                        // number of read threads
@@ -465,7 +470,7 @@ public abstract class Server {
   private Class<? extends Writable> rpcRequestClass;   // class used for deserializing the rpc request
   final protected RpcMetrics rpcMetrics;
   final protected RpcDetailedMetrics rpcDetailedMetrics;
-  
+
   private Configuration conf;
   private String portRangeConfig = null;
   private SecretManager<TokenIdentifier> secretManager;
@@ -488,6 +493,8 @@ public abstract class Server {
   volatile private boolean running = true;         // true while server runs
   private CallQueueManager<Call> callQueue;
 
+  private long purgeIntervalNanos;
+
   // maintains the set of client connections and handles idle timeouts
   private ConnectionManager connectionManager;
   private Listener listener = null;
@@ -497,6 +504,12 @@ public abstract class Server {
   private Map<Integer, Listener> auxiliaryListenerMap;
   private Responder responder = null;
   private Handler[] handlers = null;
+  private final AtomicInteger numInProcessHandler = new AtomicInteger();
+  private final LongAdder totalRequests = new LongAdder();
+  private long lastSeenTotalRequests = 0;
+  private long totalRequestsPerSecond = 0;
+  private final long metricsUpdaterInterval;
+  private final ScheduledExecutorService scheduledExecutorService;
 
   private boolean logSlowRPC = false;
 
@@ -508,15 +521,41 @@ public abstract class Server {
     return logSlowRPC;
   }
 
+  public int getNumInProcessHandler() {
+    return numInProcessHandler.get();
+  }
+
+  public long getTotalRequests() {
+    return totalRequests.sum();
+  }
+
+  public long getTotalRequestsPerSecond() {
+    return totalRequestsPerSecond;
+  }
+
   /**
    * Sets slow RPC flag.
-   * @param logSlowRPCFlag
+   * @param logSlowRPCFlag input logSlowRPCFlag.
    */
   @VisibleForTesting
   protected void setLogSlowRPC(boolean logSlowRPCFlag) {
     this.logSlowRPC = logSlowRPCFlag;
   }
 
+  private void setPurgeIntervalNanos(int purgeInterval) {
+    int tmpPurgeInterval = CommonConfigurationKeysPublic.
+        IPC_SERVER_PURGE_INTERVAL_MINUTES_DEFAULT;
+    if (purgeInterval > 0) {
+      tmpPurgeInterval = purgeInterval;
+    }
+    this.purgeIntervalNanos = TimeUnit.NANOSECONDS.convert(
+            tmpPurgeInterval, TimeUnit.MINUTES);
+  }
+
+  @VisibleForTesting
+  public long getPurgeIntervalNanos() {
+    return this.purgeIntervalNanos;
+  }
 
   /**
    * Logs a Slow RPC Request.
@@ -544,19 +583,20 @@ public abstract class Server {
         (rpcMetrics.getProcessingStdDev() * deviation);
 
     long processingTime =
-            details.get(Timing.PROCESSING, RpcMetrics.TIMEUNIT);
+            details.get(Timing.PROCESSING, rpcMetrics.getMetricsTimeUnit());
     if ((rpcMetrics.getProcessingSampleCount() > minSampleSize) &&
         (processingTime > threeSigma)) {
       LOG.warn(
           "Slow RPC : {} took {} {} to process from client {},"
               + " the processing detail is {}",
-          methodName, processingTime, RpcMetrics.TIMEUNIT, call,
+          methodName, processingTime, rpcMetrics.getMetricsTimeUnit(), call,
           details.toString());
       rpcMetrics.incrSlowRpc();
     }
   }
 
   void updateMetrics(Call call, long startTime, boolean connDropped) {
+    totalRequests.increment();
     // delta = handler + processing + response
     long deltaNanos = Time.monotonicNowNanos() - startTime;
     long timestampNanos = call.timestampNanos;
@@ -570,7 +610,7 @@ public abstract class Server {
     deltaNanos -= details.get(Timing.RESPONSE);
     details.set(Timing.HANDLER, deltaNanos);
 
-    long queueTime = details.get(Timing.QUEUE, RpcMetrics.TIMEUNIT);
+    long queueTime = details.get(Timing.QUEUE, rpcMetrics.getMetricsTimeUnit());
     rpcMetrics.addRpcQueueTime(queueTime);
 
     if (call.isResponseDeferred() || connDropped) {
@@ -579,9 +619,9 @@ public abstract class Server {
     }
 
     long processingTime =
-        details.get(Timing.PROCESSING, RpcMetrics.TIMEUNIT);
+        details.get(Timing.PROCESSING, rpcMetrics.getMetricsTimeUnit());
     long waitTime =
-        details.get(Timing.LOCKWAIT, RpcMetrics.TIMEUNIT);
+        details.get(Timing.LOCKWAIT, rpcMetrics.getMetricsTimeUnit());
     rpcMetrics.addRpcLockWaitTime(waitTime);
     rpcMetrics.addRpcProcessingTime(processingTime);
     // don't include lock wait for detailed metrics.
@@ -646,17 +686,17 @@ public abstract class Server {
     }
   }
 
-  @org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting
+  @VisibleForTesting
   int getPriorityLevel(Schedulable e) {
     return callQueue.getPriorityLevel(e);
   }
 
-  @org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting
+  @VisibleForTesting
   int getPriorityLevel(UserGroupInformation ugi) {
     return callQueue.getPriorityLevel(ugi);
   }
 
-  @org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting
+  @VisibleForTesting
   void setPriorityLevel(UserGroupInformation ugi, int priority) {
     callQueue.setPriorityLevel(ugi, priority);
   }
@@ -687,6 +727,9 @@ public abstract class Server {
 
   /**
    * Refresh the service authorization ACL for the service handled by this server.
+   *
+   * @param conf input Configuration.
+   * @param provider input PolicyProvider.
    */
   public void refreshServiceAcl(Configuration conf, PolicyProvider provider) {
     serviceAuthorizationManager.refresh(conf, provider);
@@ -695,6 +738,9 @@ public abstract class Server {
   /**
    * Refresh the service authorization ACL for the service handled by this server
    * using the specified Configuration.
+   *
+   * @param conf input Configuration.
+   * @param provider input provider.
    */
   @Private
   public void refreshServiceAclWithLoadedConfiguration(Configuration conf,
@@ -714,6 +760,7 @@ public abstract class Server {
     return CommonConfigurationKeys.IPC_NAMESPACE + "." + port;
   }
 
+  @Deprecated
   static Class<? extends BlockingQueue<Call>> getQueueClass(
       String prefix, Configuration conf) {
     String name = prefix + "." + CommonConfigurationKeys.IPC_CALLQUEUE_IMPL_KEY;
@@ -721,6 +768,32 @@ public abstract class Server {
     return CallQueueManager.convertQueueClass(queueClass, Call.class);
   }
 
+  /**
+   * Return class configured by property 'ipc.<port>.callqueue.impl' if it is
+   * present. If the config is not present, default config (without port) is
+   * used to derive class i.e 'ipc.callqueue.impl', and derived class is
+   * returned if class value is present and valid. If default config is also
+   * not present, default class {@link LinkedBlockingQueue} is returned.
+   *
+   * @param namespace Namespace "ipc".
+   * @param port Server's listener port.
+   * @param conf Configuration properties.
+   * @return Class returned based on configuration.
+   */
+  static Class<? extends BlockingQueue<Call>> getQueueClass(
+      String namespace, int port, Configuration conf) {
+    String nameWithPort = namespace + "." + port + "."
+        + CommonConfigurationKeys.IPC_CALLQUEUE_IMPL_KEY;
+    String nameWithoutPort = namespace + "."
+        + CommonConfigurationKeys.IPC_CALLQUEUE_IMPL_KEY;
+    Class<?> queueClass = conf.getClass(nameWithPort, null);
+    if(queueClass == null) {
+      queueClass = conf.getClass(nameWithoutPort, LinkedBlockingQueue.class);
+    }
+    return CallQueueManager.convertQueueClass(queueClass, Call.class);
+  }
+
+  @Deprecated
   static Class<? extends RpcScheduler> getSchedulerClass(
       String prefix, Configuration conf) {
     String schedulerKeyname = prefix + "." + CommonConfigurationKeys
@@ -746,6 +819,51 @@ public abstract class Server {
     return CallQueueManager.convertSchedulerClass(schedulerClass);
   }
 
+  /**
+   * Return class configured by property 'ipc.<port>.scheduler.impl' if it is
+   * present. If the config is not present, and if property
+   * 'ipc.<port>.callqueue.impl' represents FairCallQueue class,
+   * return DecayRpcScheduler. If config 'ipc.<port>.callqueue.impl'
+   * does not have value FairCallQueue, default config (without port) is used
+   * to derive class i.e 'ipc.scheduler.impl'. If default config is also not
+   * present, default class {@link DefaultRpcScheduler} is returned.
+   *
+   * @param namespace Namespace "ipc".
+   * @param port Server's listener port.
+   * @param conf Configuration properties.
+   * @return Class returned based on configuration.
+   */
+  static Class<? extends RpcScheduler> getSchedulerClass(
+      String namespace, int port, Configuration conf) {
+    String schedulerKeyNameWithPort = namespace + "." + port + "."
+        + CommonConfigurationKeys.IPC_SCHEDULER_IMPL_KEY;
+    String schedulerKeyNameWithoutPort = namespace + "."
+        + CommonConfigurationKeys.IPC_SCHEDULER_IMPL_KEY;
+
+    Class<?> schedulerClass = conf.getClass(schedulerKeyNameWithPort, null);
+    // Patch the configuration for legacy fcq configuration that does not have
+    // a separate scheduler setting
+    if (schedulerClass == null) {
+      String queueKeyNameWithPort = namespace + "." + port + "."
+          + CommonConfigurationKeys.IPC_CALLQUEUE_IMPL_KEY;
+      Class<?> queueClass = conf.getClass(queueKeyNameWithPort, null);
+      if (queueClass != null) {
+        if (queueClass.getCanonicalName().equals(
+            FairCallQueue.class.getCanonicalName())) {
+          conf.setClass(schedulerKeyNameWithPort, DecayRpcScheduler.class,
+              RpcScheduler.class);
+        }
+      }
+    }
+
+    schedulerClass = conf.getClass(schedulerKeyNameWithPort, null);
+    if (schedulerClass == null) {
+      schedulerClass = conf.getClass(schedulerKeyNameWithoutPort,
+          DefaultRpcScheduler.class);
+    }
+    return CallQueueManager.convertSchedulerClass(schedulerClass);
+  }
+
   /*
    * Refresh the call queue
    */
@@ -755,19 +873,49 @@ public abstract class Server {
     this.maxQueueSize = handlerCount * conf.getInt(
         CommonConfigurationKeys.IPC_SERVER_HANDLER_QUEUE_SIZE_KEY,
         CommonConfigurationKeys.IPC_SERVER_HANDLER_QUEUE_SIZE_DEFAULT);
-    callQueue.swapQueue(getSchedulerClass(prefix, conf),
-        getQueueClass(prefix, conf), maxQueueSize, prefix, conf);
-    callQueue.setClientBackoffEnabled(getClientBackoffEnable(prefix, conf));
+    callQueue.swapQueue(
+        getSchedulerClass(CommonConfigurationKeys.IPC_NAMESPACE, port, conf),
+        getQueueClass(CommonConfigurationKeys.IPC_NAMESPACE, port, conf),
+        maxQueueSize, prefix, conf);
+    callQueue.setClientBackoffEnabled(getClientBackoffEnable(
+        CommonConfigurationKeys.IPC_NAMESPACE, port, conf));
   }
 
   /**
    * Get from config if client backoff is enabled on that port.
    */
+  @Deprecated
   static boolean getClientBackoffEnable(
       String prefix, Configuration conf) {
     String name = prefix + "." +
         CommonConfigurationKeys.IPC_BACKOFF_ENABLE;
     return conf.getBoolean(name,
+        CommonConfigurationKeys.IPC_BACKOFF_ENABLE_DEFAULT);
+  }
+
+  /**
+   * Return boolean value configured by property 'ipc.<port>.backoff.enable'
+   * if it is present. If the config is not present, default config
+   * (without port) is used to derive class i.e 'ipc.backoff.enable',
+   * and derived value is returned if configured. Otherwise, default value
+   * {@link CommonConfigurationKeys#IPC_BACKOFF_ENABLE_DEFAULT} is returned.
+   *
+   * @param namespace Namespace "ipc".
+   * @param port Server's listener port.
+   * @param conf Configuration properties.
+   * @return Value returned based on configuration.
+   */
+  static boolean getClientBackoffEnable(
+      String namespace, int port, Configuration conf) {
+    String name = namespace + "." + port + "." +
+        CommonConfigurationKeys.IPC_BACKOFF_ENABLE;
+    boolean valueWithPort = conf.getBoolean(name,
+        CommonConfigurationKeys.IPC_BACKOFF_ENABLE_DEFAULT);
+    if (valueWithPort != CommonConfigurationKeys.IPC_BACKOFF_ENABLE_DEFAULT) {
+      return valueWithPort;
+    }
+    return conf.getBoolean(namespace + "."
+            + CommonConfigurationKeys.IPC_BACKOFF_ENABLE,
         CommonConfigurationKeys.IPC_BACKOFF_ENABLE_DEFAULT);
   }
 
@@ -864,6 +1012,9 @@ public abstract class Server {
     }
     public InetAddress getHostInetAddress() {
       return null;
+    }
+    public int getRemotePort() {
+      return 0;
     }
     public String getHostAddress() {
       InetAddress addr = getHostInetAddress();
@@ -1020,6 +1171,11 @@ public abstract class Server {
     @Override
     public InetAddress getHostInetAddress() {
       return connection.getHostInetAddress();
+    }
+
+    @Override
+    public int getRemotePort() {
+      return connection.getRemotePort();
     }
 
     @Override
@@ -1489,9 +1645,6 @@ public abstract class Server {
     }
   }
 
-  private final static long PURGE_INTERVAL_NANOS = TimeUnit.NANOSECONDS.convert(
-      15, TimeUnit.MINUTES);
-
   // Sends responses of RPC back to clients.
   private class Responder extends Thread {
     private final Selector writeSelector;
@@ -1527,7 +1680,7 @@ public abstract class Server {
         try {
           waitPending();     // If a channel is being registered, wait.
           writeSelector.select(
-              TimeUnit.NANOSECONDS.toMillis(PURGE_INTERVAL_NANOS));
+              TimeUnit.NANOSECONDS.toMillis(purgeIntervalNanos));
           Iterator<SelectionKey> iter = writeSelector.selectedKeys().iterator();
           while (iter.hasNext()) {
             SelectionKey key = iter.next();
@@ -1550,7 +1703,7 @@ public abstract class Server {
             }
           }
           long nowNanos = Time.monotonicNowNanos();
-          if (nowNanos < lastPurgeTimeNanos + PURGE_INTERVAL_NANOS) {
+          if (nowNanos < lastPurgeTimeNanos + purgeIntervalNanos) {
             continue;
           }
           lastPurgeTimeNanos = nowNanos;
@@ -1628,7 +1781,7 @@ public abstract class Server {
         Iterator<RpcCall> iter = responseQueue.listIterator(0);
         while (iter.hasNext()) {
           call = iter.next();
-          if (now > call.responseTimestampNanos + PURGE_INTERVAL_NANOS) {
+          if (now > call.responseTimestampNanos + purgeIntervalNanos) {
             closeConnection(call.connection);
             break;
           }
@@ -1904,6 +2057,10 @@ public abstract class Server {
 
     public int getIngressPort() {
       return ingressPort;
+    }
+
+    public int getRemotePort() {
+      return remotePort;
     }
 
     public InetAddress getHostInetAddress() {
@@ -2249,7 +2406,7 @@ public abstract class Server {
      * @return -1 in case of error, else num bytes read so far
      * @throws IOException - internal error that should not be returned to
      *         client, typically failure to respond to client
-     * @throws InterruptedException
+     * @throws InterruptedException - if the thread is interrupted.
      */
     public int readAndProcess() throws IOException, InterruptedException {
       while (!shouldClose()) { // stop if a fatal response has been sent.
@@ -2937,6 +3094,7 @@ public abstract class Server {
 
         try {
           call = callQueue.take(); // pop the queue; maybe blocked here
+          numInProcessHandler.incrementAndGet();
           startTimeNanos = Time.monotonicNowNanos();
           if (alignmentContext != null && call.isCallCoordinated() &&
               call.getClientStateId() > alignmentContext.getLastSeenStateId()) {
@@ -2954,6 +3112,7 @@ public abstract class Server {
              */
             // Re-queue the call and continue
             requeueCall(call);
+            call = null;
             continue;
           }
           if (LOG.isDebugEnabled()) {
@@ -2989,6 +3148,7 @@ public abstract class Server {
           }
         } finally {
           CurCall.set(null);
+          numInProcessHandler.decrementAndGet();
           IOUtils.cleanupWithLogger(LOG, traceScope);
           if (call != null) {
             updateMetrics(call, startTimeNanos, connDropped);
@@ -3064,6 +3224,18 @@ public abstract class Server {
    *  Class, RPC.RpcInvoker)}
    * This parameter has been retained for compatibility with existing tests
    * and usage.
+   *
+   * @param bindAddress input bindAddress.
+   * @param port input port.
+   * @param rpcRequestClass input rpcRequestClass.
+   * @param handlerCount input handlerCount.
+   * @param numReaders input numReaders.
+   * @param queueSizePerHandler input queueSizePerHandler.
+   * @param conf input Configuration.
+   * @param serverName input serverName.
+   * @param secretManager input secretManager.
+   * @param portRangeConfig input portRangeConfig.
+   * @throws IOException raised on errors performing I/O.
    */
   @SuppressWarnings("unchecked")
   protected Server(String bindAddress, int port,
@@ -3106,9 +3278,11 @@ public abstract class Server {
 
     // Setup appropriate callqueue
     final String prefix = getQueueClassPrefix();
-    this.callQueue = new CallQueueManager<Call>(getQueueClass(prefix, conf),
-        getSchedulerClass(prefix, conf),
-        getClientBackoffEnable(prefix, conf), maxQueueSize, prefix, conf);
+    this.callQueue = new CallQueueManager<>(
+        getQueueClass(CommonConfigurationKeys.IPC_NAMESPACE, port, conf),
+        getSchedulerClass(CommonConfigurationKeys.IPC_NAMESPACE, port, conf),
+        getClientBackoffEnable(CommonConfigurationKeys.IPC_NAMESPACE, port, conf),
+        maxQueueSize, prefix, conf);
 
     this.secretManager = (SecretManager<TokenIdentifier>) secretManager;
     this.authorize = 
@@ -3134,6 +3308,10 @@ public abstract class Server {
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC,
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_DEFAULT));
 
+    this.setPurgeIntervalNanos(conf.getInt(
+        CommonConfigurationKeysPublic.IPC_SERVER_PURGE_INTERVAL_MINUTES_KEY,
+        CommonConfigurationKeysPublic.IPC_SERVER_PURGE_INTERVAL_MINUTES_DEFAULT));
+
     // Create the responder here
     responder = new Responder();
     
@@ -3145,6 +3323,14 @@ public abstract class Server {
     this.exceptionsHandler.addTerseLoggingExceptions(StandbyException.class);
     this.exceptionsHandler.addTerseLoggingExceptions(
         HealthCheckFailedException.class);
+    this.metricsUpdaterInterval =
+        conf.getLong(CommonConfigurationKeysPublic.IPC_SERVER_METRICS_UPDATE_RUNNER_INTERVAL,
+            CommonConfigurationKeysPublic.IPC_SERVER_METRICS_UPDATE_RUNNER_INTERVAL_DEFAULT);
+    this.scheduledExecutorService = new ScheduledThreadPoolExecutor(1,
+        new ThreadFactoryBuilder().setDaemon(true).setNameFormat("Hadoop-Metrics-Updater-%d")
+            .build());
+    this.scheduledExecutorService.scheduleWithFixedDelay(new MetricsUpdateRunner(),
+        metricsUpdaterInterval, metricsUpdaterInterval, TimeUnit.MILLISECONDS);
   }
 
   public synchronized void addAuxiliaryListener(int auxiliaryPort)
@@ -3390,7 +3576,10 @@ public abstract class Server {
     return conf;
   }
   
-  /** Sets the socket buffer size used for responding to RPCs */
+  /**
+   * Sets the socket buffer size used for responding to RPCs.
+   * @param size input size.
+   */
   public void setSocketSendBufSize(int size) { this.socketSendBufferSize = size; }
 
   public void setTracer(Tracer t) {
@@ -3436,13 +3625,30 @@ public abstract class Server {
     }
     responder.interrupt();
     notifyAll();
+    shutdownMetricsUpdaterExecutor();
     this.rpcMetrics.shutdown();
     this.rpcDetailedMetrics.shutdown();
   }
 
-  /** Wait for the server to be stopped.
+  private void shutdownMetricsUpdaterExecutor() {
+    this.scheduledExecutorService.shutdown();
+    try {
+      boolean isExecutorShutdown =
+          this.scheduledExecutorService.awaitTermination(3, TimeUnit.SECONDS);
+      if (!isExecutorShutdown) {
+        LOG.info("Hadoop Metrics Updater executor could not be shutdown.");
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      LOG.info("Hadoop Metrics Updater executor shutdown interrupted.", e);
+    }
+  }
+
+  /**
+   * Wait for the server to be stopped.
    * Does not wait for all subthreads to finish.
    *  See {@link #stop()}.
+   * @throws InterruptedException if the thread is interrupted.
    */
   public synchronized void join() throws InterruptedException {
     while (running) {
@@ -3479,13 +3685,25 @@ public abstract class Server {
    * Called for each call. 
    * @deprecated Use  {@link #call(RPC.RpcKind, String,
    *  Writable, long)} instead
+   * @param param input param.
+   * @param receiveTime input receiveTime.
+   * @throws Exception if any error occurs.
+   * @return Call
    */
   @Deprecated
   public Writable call(Writable param, long receiveTime) throws Exception {
     return call(RPC.RpcKind.RPC_BUILTIN, null, param, receiveTime);
   }
   
-  /** Called for each call. */
+  /**
+   * Called for each call.
+   * @param rpcKind input rpcKind.
+   * @param protocol input protocol.
+   * @param param input param.
+   * @param receiveTime input receiveTime.
+   * @return Call.
+   * @throws Exception raised on errors performing I/O.
+   */
   public abstract Writable call(RPC.RpcKind rpcKind, String protocol,
       Writable param, long receiveTime) throws Exception;
   
@@ -3533,7 +3751,7 @@ public abstract class Server {
   }
 
   /**
-   * Get the NumOpenConnections/User.
+   * @return Get the NumOpenConnections/User.
    */
   public String getNumOpenConnectionsPerUser() {
     ObjectMapper mapper = new ObjectMapper();
@@ -3885,4 +4103,32 @@ public abstract class Server {
   public String getServerName() {
     return serverName;
   }
+
+  /**
+   * Server metrics updater thread, used to update some metrics on a regular basis.
+   * For instance, requests per second.
+   */
+  private class MetricsUpdateRunner implements Runnable {
+
+    private long lastExecuted = 0;
+
+    @Override
+    public synchronized void run() {
+      long currentTime = Time.monotonicNow();
+      if (lastExecuted == 0) {
+        lastExecuted = currentTime - metricsUpdaterInterval;
+      }
+      long currentTotalRequests = totalRequests.sum();
+      long totalRequestsDiff = currentTotalRequests - lastSeenTotalRequests;
+      lastSeenTotalRequests = currentTotalRequests;
+      if ((currentTime - lastExecuted) > 0) {
+        double totalRequestsPerSecInDouble =
+            (double) totalRequestsDiff / TimeUnit.MILLISECONDS.toSeconds(
+                currentTime - lastExecuted);
+        totalRequestsPerSecond = ((long) totalRequestsPerSecInDouble);
+      }
+      lastExecuted = currentTime;
+    }
+  }
+
 }

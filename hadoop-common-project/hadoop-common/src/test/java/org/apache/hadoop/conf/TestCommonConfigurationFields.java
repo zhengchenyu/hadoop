@@ -21,21 +21,17 @@ package org.apache.hadoop.conf;
 import java.util.HashSet;
 
 import org.apache.hadoop.crypto.key.kms.KMSClientProvider;
-import org.apache.hadoop.fs.AbstractFileSystem;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.ftp.FtpConfigKeys;
 import org.apache.hadoop.fs.local.LocalConfigKeys;
 import org.apache.hadoop.ha.SshFenceByTcpPort;
 import org.apache.hadoop.ha.ZKFailoverController;
-import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.io.erasurecode.CodecUtil;
-import org.apache.hadoop.io.nativeio.NativeIO;
 import org.apache.hadoop.security.CompositeGroupsMapping;
 import org.apache.hadoop.security.HttpCrossOriginFilterInitializer;
 import org.apache.hadoop.security.LdapGroupsMapping;
 import org.apache.hadoop.security.RuleBasedLdapGroupsMapping;
-import org.apache.hadoop.security.http.CrossOriginFilter;
 import org.apache.hadoop.security.ssl.SSLFactory;
 
 /**
@@ -80,9 +76,9 @@ public class TestCommonConfigurationFields extends TestConfigurationFieldsBase {
         };
 
     // Initialize used variables
-    xmlPropsToSkipCompare = new HashSet<String>();
-    xmlPrefixToSkipCompare = new HashSet<String>();
-    configurationPropsToSkipCompare = new HashSet<String>();
+    xmlPropsToSkipCompare = new HashSet<>();
+    xmlPrefixToSkipCompare = new HashSet<>();
+    configurationPropsToSkipCompare = new HashSet<>();
 
     // Set error modes
     errorIfMissingConfigProps = true;
@@ -117,7 +113,6 @@ public class TestCommonConfigurationFields extends TestConfigurationFieldsBase {
     xmlPrefixToSkipCompare.add("fs.abfs.impl");
     xmlPrefixToSkipCompare.add("fs.abfss.impl");
 
-
     // ADL properties are in a different subtree
     // - org.apache.hadoop.hdfs.web.ADLConfKeys
     xmlPrefixToSkipCompare.add("adl.");
@@ -130,6 +125,7 @@ public class TestCommonConfigurationFields extends TestConfigurationFieldsBase {
     xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.abfss.impl");
     xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.file.impl");
     xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.ftp.impl");
+    xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.gs.impl");
     xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.hdfs.impl");
     xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.http.impl");
     xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.https.impl");
@@ -139,9 +135,9 @@ public class TestCommonConfigurationFields extends TestConfigurationFieldsBase {
     xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.s3a.impl");
     xmlPropsToSkipCompare.
         add("fs.viewfs.overload.scheme.target.swebhdfs.impl");
+    xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.swift.impl");
     xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.webhdfs.impl");
     xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.wasb.impl");
-    xmlPropsToSkipCompare.add("fs.viewfs.overload.scheme.target.swift.impl");
 
     // Azure properties are in a different class
     // - org.apache.hadoop.fs.azure.AzureNativeFileSystemStore
@@ -156,13 +152,18 @@ public class TestCommonConfigurationFields extends TestConfigurationFieldsBase {
 
     // FairCallQueue configs that includes dynamic ports in its keys
     xmlPropsToSkipCompare.add("ipc.[port_number].backoff.enable");
+    xmlPropsToSkipCompare.add("ipc.backoff.enable");
     xmlPropsToSkipCompare.add("ipc.[port_number].callqueue.impl");
+    xmlPropsToSkipCompare.add("ipc.callqueue.impl");
     xmlPropsToSkipCompare.add("ipc.[port_number].scheduler.impl");
+    xmlPropsToSkipCompare.add("ipc.scheduler.impl");
     xmlPropsToSkipCompare.add("ipc.[port_number].scheduler.priority.levels");
     xmlPropsToSkipCompare.add(
         "ipc.[port_number].faircallqueue.multiplexer.weights");
     xmlPropsToSkipCompare.add("ipc.[port_number].identity-provider.impl");
+    xmlPropsToSkipCompare.add("ipc.identity-provider.impl");
     xmlPropsToSkipCompare.add("ipc.[port_number].cost-provider.impl");
+    xmlPropsToSkipCompare.add("ipc.cost-provider.impl");
     xmlPropsToSkipCompare.add("ipc.[port_number].decay-scheduler.period-ms");
     xmlPropsToSkipCompare.add("ipc.[port_number].decay-scheduler.decay-factor");
     xmlPropsToSkipCompare.add("ipc.[port_number].decay-scheduler.thresholds");
@@ -238,8 +239,6 @@ public class TestCommonConfigurationFields extends TestConfigurationFieldsBase {
     // - org.apache.hadoop.net.NetUtils
     xmlPropsToSkipCompare
         .add("hadoop.rpc.socket.factory.class.ClientProtocol");
-    // - Where is this used?
-    xmlPropsToSkipCompare.add("hadoop.ssl.enabled");
 
     // Keys with no corresponding variable
     // - org.apache.hadoop.io.compress.bzip2.Bzip2Factory

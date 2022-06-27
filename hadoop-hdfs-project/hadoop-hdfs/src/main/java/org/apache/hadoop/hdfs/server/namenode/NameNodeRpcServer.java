@@ -21,6 +21,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENG
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_IP_PROXY_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_RATIO_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_RATIO_KEY;
@@ -45,7 +46,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.hadoop.ipc.CallerContext;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -127,6 +129,7 @@ import org.apache.hadoop.hdfs.protocol.QuotaByStorageTypeExceededException;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.RecoveryInProgressException;
 import org.apache.hadoop.hdfs.protocol.ReplicatedBlockStats;
+import org.apache.hadoop.hdfs.protocol.XAttrNotFoundException;
 import org.apache.hadoop.hdfs.protocol.ZoneReencryptionStatus;
 import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
@@ -219,11 +222,12 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.tools.proto.GetUserMappingsProtocolProtos.GetUserMappingsProtocolService;
 import org.apache.hadoop.tools.protocolPB.GetUserMappingsProtocolPB;
 import org.apache.hadoop.tools.protocolPB.GetUserMappingsProtocolServerSideTranslatorPB;
+import org.apache.hadoop.util.Lists;
 import org.apache.hadoop.util.VersionInfo;
 import org.apache.hadoop.util.VersionUtil;
 import org.slf4j.Logger;
 
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.thirdparty.protobuf.BlockingService;
 import org.apache.hadoop.hdfs.server.protocol.DisallowedDatanodeException;
 
@@ -267,6 +271,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
 
   private final String defaultECPolicyName;
 
+  // Users who can override the client ip
+  private final String[] ipProxyUsers;
+
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
     this.nn = nn;
@@ -277,6 +284,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     int handlerCount = 
       conf.getInt(DFS_NAMENODE_HANDLER_COUNT_KEY, 
                   DFS_NAMENODE_HANDLER_COUNT_DEFAULT);
+    ipProxyUsers = conf.getStrings(DFS_NAMENODE_IP_PROXY_USERS);
 
     RPC.setProtocolEngine(conf, ClientNamenodeProtocolPB.class,
         ProtobufRpcEngine2.class);
@@ -450,7 +458,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
 
     GlobalStateIdContext stateIdContext = null;
     if (enableStateContext) {
-      stateIdContext = new GlobalStateIdContext((namesystem));
+      stateIdContext = new GlobalStateIdContext(namesystem);
     }
 
     clientRpcServer = new RPC.Builder(conf)
@@ -532,7 +540,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         AclException.class,
         FSLimitException.PathComponentTooLongException.class,
         FSLimitException.MaxDirectoryItemsExceededException.class,
-        DisallowedDatanodeException.class);
+        DisallowedDatanodeException.class,
+        XAttrNotFoundException.class);
 
     clientRpcServer.addSuppressedLoggingExceptions(StandbyException.class,
         UnresolvedPathException.class);
@@ -1500,6 +1509,12 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     }
   }
 
+  @Override
+  public DatanodeInfo[] getSlowDatanodeReport() throws IOException {
+    checkNNStartup();
+    return namesystem.slowDataNodesReport();
+  }
+
   @Override // ClientProtocol
   public void setQuota(String path, long namespaceQuota, long storagespaceQuota,
                        StorageType type)
@@ -1632,7 +1647,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         }
       }
     } catch (UnregisteredNodeException une) {
-      LOG.debug("Datanode {} is attempting to report but not register yet.",
+      LOG.warn("Datanode {} is attempting to report but not register yet.",
           nodeReg);
       return RegisterCommand.REGISTER;
     }
@@ -1898,7 +1913,29 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     }
   }
 
-  private static String getClientMachine() {
+  private String getClientMachine() {
+    if (ipProxyUsers != null) {
+      // Get the real user (or effective if it isn't a proxy user)
+      UserGroupInformation user =
+          UserGroupInformation.getRealUserOrSelf(Server.getRemoteUser());
+      if (user != null &&
+          ArrayUtils.contains(ipProxyUsers, user.getShortUserName())) {
+        CallerContext context = CallerContext.getCurrent();
+        if (context != null && context.isContextValid()) {
+          String cc = context.getContext();
+          // if the rpc has a caller context of "clientIp:1.2.3.4,CLI",
+          // return "1.2.3.4" as the client machine.
+          String key = CallerContext.CLIENT_IP_STR +
+              CallerContext.Builder.KEY_VALUE_SEPARATOR;
+          int posn = cc.indexOf(key);
+          if (posn != -1) {
+            posn += key.length();
+            int end = cc.indexOf(",", posn);
+            return end == -1 ? cc.substring(posn) : cc.substring(posn, end);
+          }
+        }
+      }
+    }
     String clientMachine = Server.getRemoteAddress();
     if (clientMachine == null) { //not a RPC client
       clientMachine = "";

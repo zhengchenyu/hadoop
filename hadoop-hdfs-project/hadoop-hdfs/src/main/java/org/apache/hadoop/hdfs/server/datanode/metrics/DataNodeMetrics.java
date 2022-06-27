@@ -168,6 +168,8 @@ public class DataNodeMetrics {
   private MutableCounterLong ecReconstructionDecodingTimeMillis;
   @Metric("Milliseconds spent on write by erasure coding worker")
   private MutableCounterLong ecReconstructionWriteTimeMillis;
+  @Metric("Milliseconds spent on validating by erasure coding worker")
+  private MutableCounterLong ecReconstructionValidateTimeMillis;
   @Metric("Sum of all BPServiceActors command queue length")
   private MutableCounterLong sumOfActorCommandQueueLength;
   @Metric("Num of processed commands of all BPServiceActors")
@@ -189,6 +191,8 @@ public class DataNodeMetrics {
   @Metric MutableCounterLong packetsSlowWriteToMirror;
   @Metric MutableCounterLong packetsSlowWriteToDisk;
   @Metric MutableCounterLong packetsSlowWriteToOsCache;
+  @Metric private MutableCounterLong slowFlushOrSyncCount;
+  @Metric private MutableCounterLong slowAckToUpstreamCount;
 
   @Metric("Number of replaceBlock ops between" +
       " storage types on same host with local copy")
@@ -438,6 +442,14 @@ public class DataNodeMetrics {
     volumeFailures.incr(size);
   }
 
+  public void incrSlowFlushOrSyncCount() {
+    slowFlushOrSyncCount.incr();
+  }
+
+  public void incrSlowAckToUpstreamCount() {
+    slowAckToUpstreamCount.incr();
+  }
+
   public void incrDatanodeNetworkErrors() {
     datanodeNetworkErrors.incr();
   }
@@ -627,6 +639,10 @@ public class DataNodeMetrics {
 
   public void incrECReconstructionDecodingTime(long millis) {
     ecReconstructionDecodingTimeMillis.incr(millis);
+  }
+
+  public void incrECReconstructionValidateTime(long millis) {
+    ecReconstructionValidateTimeMillis.incr(millis);
   }
 
   public DataNodeUsageReport getDNUsageReport(long timeSinceLastReport) {

@@ -56,11 +56,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CyclicBarrier;
 
 import org.apache.commons.io.FileUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Sets;
 import org.apache.hadoop.yarn.MockApps;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.ApplicationsRequestScope;
@@ -188,7 +187,8 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableSet;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TestClientRMService {
 
@@ -1402,9 +1402,9 @@ public class TestClientRMService {
     request.setQueues(queueSet);
 
     queueSet.add(queues[0]);
-    assertEquals("Incorrect number of applications in queue", 2,
+    assertEquals("Incorrect number of applications in queue", 3,
         rmService.getApplications(request).getApplicationList().size());
-    assertEquals("Incorrect number of applications in queue", 2,
+    assertEquals("Incorrect number of applications in queue", 3,
         rmService.getApplications(request).getApplicationList().size());
 
     queueSet.add(queues[1]);

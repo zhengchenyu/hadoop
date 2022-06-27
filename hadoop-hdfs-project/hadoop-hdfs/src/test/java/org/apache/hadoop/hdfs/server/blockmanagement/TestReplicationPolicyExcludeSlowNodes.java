@@ -22,7 +22,8 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.TestBlockStoragePolicy;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
-import org.apache.hadoop.net.Node;
+import org.apache.hadoop.hdfs.server.protocol.OutlierMetrics;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -89,23 +90,29 @@ public class TestReplicationPolicyExcludeSlowNodes
 
       // mock slow nodes
       SlowPeerTracker tracker = dnManager.getSlowPeerTracker();
-      tracker.addReport(dataNodes[0].getInfoAddr(), dataNodes[3].getInfoAddr());
-      tracker.addReport(dataNodes[0].getInfoAddr(), dataNodes[4].getInfoAddr());
-      tracker.addReport(dataNodes[1].getInfoAddr(), dataNodes[4].getInfoAddr());
-      tracker.addReport(dataNodes[1].getInfoAddr(), dataNodes[5].getInfoAddr());
-      tracker.addReport(dataNodes[2].getInfoAddr(), dataNodes[3].getInfoAddr());
-      tracker.addReport(dataNodes[2].getInfoAddr(), dataNodes[5].getInfoAddr());
+      OutlierMetrics outlierMetrics1 = new OutlierMetrics(0.0, 0.0, 0.0, 1.29463);
+      tracker.addReport(dataNodes[0].getInfoAddr(), dataNodes[3].getInfoAddr(), outlierMetrics1);
+      OutlierMetrics outlierMetrics2 = new OutlierMetrics(0.0, 0.0, 0.0, 2.9576);
+      tracker.addReport(dataNodes[0].getInfoAddr(), dataNodes[4].getInfoAddr(), outlierMetrics2);
+      OutlierMetrics outlierMetrics3 = new OutlierMetrics(0.0, 0.0, 0.0, 3.59674);
+      tracker.addReport(dataNodes[1].getInfoAddr(), dataNodes[4].getInfoAddr(), outlierMetrics3);
+      OutlierMetrics outlierMetrics4 = new OutlierMetrics(0.0, 0.0, 0.0, 4.238456);
+      tracker.addReport(dataNodes[1].getInfoAddr(), dataNodes[5].getInfoAddr(), outlierMetrics4);
+      OutlierMetrics outlierMetrics5 = new OutlierMetrics(0.0, 0.0, 0.0, 5.18375);
+      tracker.addReport(dataNodes[2].getInfoAddr(), dataNodes[3].getInfoAddr(), outlierMetrics5);
+      OutlierMetrics outlierMetrics6 = new OutlierMetrics(0.0, 0.0, 0.0, 6.39576);
+      tracker.addReport(dataNodes[2].getInfoAddr(), dataNodes[5].getInfoAddr(), outlierMetrics6);
 
       // waiting for slow nodes collector run
       Thread.sleep(3000);
 
       // fetch slow nodes
-      Set<Node> slowPeers = dnManager.getSlowPeers();
+      Set<String> slowPeers = dnManager.getSlowPeersUuidSet();
 
       // assert slow nodes
       assertEquals(3, slowPeers.size());
       for (int i = 0; i < slowPeers.size(); i++) {
-        assertTrue(slowPeers.contains(dataNodes[i]));
+        assertTrue(slowPeers.contains(dataNodes[i].getDatanodeUuid()));
       }
 
       // mock writer
@@ -120,7 +127,8 @@ public class TestReplicationPolicyExcludeSlowNodes
       // assert targets
       assertEquals(3, targets.length);
       for (int i = 0; i < targets.length; i++) {
-        assertTrue(!slowPeers.contains(targets[i].getDatanodeDescriptor()));
+        assertTrue(!slowPeers.contains(targets[i].getDatanodeDescriptor()
+            .getDatanodeUuid()));
       }
     } finally {
       namenode.getNamesystem().writeUnlock();

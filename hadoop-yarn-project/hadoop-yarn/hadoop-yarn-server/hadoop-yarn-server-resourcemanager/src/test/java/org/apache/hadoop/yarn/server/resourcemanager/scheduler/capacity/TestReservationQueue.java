@@ -46,6 +46,7 @@ public class TestReservationQueue {
 
   private CapacitySchedulerConfiguration csConf;
   private CapacitySchedulerContext csContext;
+  private CapacitySchedulerQueueContext queueContext;
   final static int DEF_MAX_APPS = 10000;
   final static int GB = 1024;
   private final ResourceCalculator resourceCalculator =
@@ -60,7 +61,12 @@ public class TestReservationQueue {
 
     YarnConfiguration conf = new YarnConfiguration();
     csContext = mock(CapacitySchedulerContext.class);
+    CapacitySchedulerQueueManager csQm = mock(
+        CapacitySchedulerQueueManager.class);
+    ConfiguredNodeLabels labels = new ConfiguredNodeLabels(csConf);
+    when(csQm.getConfiguredNodeLabelsForAllQueues()).thenReturn(labels);
     when(csContext.getConfiguration()).thenReturn(csConf);
+    when(csContext.getCapacitySchedulerQueueManager()).thenReturn(csQm);
     when(csContext.getConf()).thenReturn(conf);
     when(csContext.getMinimumResourceCapability()).thenReturn(
         Resources.createResource(GB, 1));
@@ -73,9 +79,11 @@ public class TestReservationQueue {
     RMContext mockRMContext = TestUtils.getMockRMContext();
     when(csContext.getRMContext()).thenReturn(mockRMContext);
 
+    queueContext = new CapacitySchedulerQueueContext(csContext);
+
     // create a queue
-    planQueue = new PlanQueue(csContext, "root", null, null);
-    autoCreatedLeafQueue = new ReservationQueue(csContext, "a", planQueue);
+    planQueue = new PlanQueue(queueContext, "root", null, null);
+    autoCreatedLeafQueue = new ReservationQueue(queueContext, "a", planQueue);
     planQueue.addChildQueue(autoCreatedLeafQueue);
   }
 

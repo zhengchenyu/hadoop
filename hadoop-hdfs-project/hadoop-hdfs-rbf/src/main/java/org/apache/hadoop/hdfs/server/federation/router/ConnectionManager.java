@@ -32,7 +32,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
@@ -135,12 +135,12 @@ public class ConnectionManager {
     this.creator.start();
 
     // Schedule a task to remove stale connection pools and sockets
-    long recyleTimeMs = Math.min(
+    long recycleTimeMs = Math.min(
         poolCleanupPeriodMs, connectionCleanupPeriodMs);
     LOG.info("Cleaning every {} seconds",
-        TimeUnit.MILLISECONDS.toSeconds(recyleTimeMs));
+        TimeUnit.MILLISECONDS.toSeconds(recycleTimeMs));
     this.cleaner.scheduleAtFixedRate(
-        new CleanupTask(), 0, recyleTimeMs, TimeUnit.MILLISECONDS);
+        new CleanupTask(), 0, recycleTimeMs, TimeUnit.MILLISECONDS);
 
     // Mark the manager as running
     this.running = true;
@@ -282,6 +282,42 @@ public class ConnectionManager {
   }
 
   /**
+   * Get number of idle connections.
+   *
+   * @return Number of active connections.
+   */
+  public int getNumIdleConnections() {
+    int total = 0;
+    readLock.lock();
+    try {
+      for (ConnectionPool pool : this.pools.values()) {
+        total += pool.getNumIdleConnections();
+      }
+    } finally {
+      readLock.unlock();
+    }
+    return total;
+  }
+
+  /**
+   * Get number of recently active connections.
+   *
+   * @return Number of recently active connections.
+   */
+  public int getNumActiveConnectionsRecently() {
+    int total = 0;
+    readLock.lock();
+    try {
+      for (ConnectionPool pool : this.pools.values()) {
+        total += pool.getNumActiveConnectionsRecently();
+      }
+    } finally {
+      readLock.unlock();
+    }
+    return total;
+  }
+
+  /**
    * Get the number of connections to be created.
    *
    * @return Number of connections to be created.
@@ -327,13 +363,22 @@ public class ConnectionManager {
       // Check if the pool hasn't been active in a while or not 50% are used
       long timeSinceLastActive = Time.now() - pool.getLastActiveTime();
       int total = pool.getNumConnections();
-      int active = pool.getNumActiveConnections();
+      // Active is a transient status in many cases for a connection since
+      // the handler thread uses the connection very quickly. Thus, the number
+      // of connections with handlers using at the call time is constantly low.
+      // Recently active is more lasting status, and it shows how many
+      // connections have been used with a recent time period. (i.e. 30 seconds)
+      int active = pool.getNumActiveConnectionsRecently();
       float poolMinActiveRatio = pool.getMinActiveRatio();
       if (timeSinceLastActive > connectionCleanupPeriodMs ||
           active < poolMinActiveRatio * total) {
-        // Remove and close 1 connection
-        List<ConnectionContext> conns = pool.removeConnections(1);
-        for (ConnectionContext conn : conns) {
+        // Be greedy here to close as many connections as possible in one shot
+        // The number should at least be 1
+        int targetConnectionsCount = Math.max(1,
+            (int)(poolMinActiveRatio * total) - active);
+        List<ConnectionContext> connections =
+            pool.removeConnections(targetConnectionsCount);
+        for (ConnectionContext conn : connections) {
           conn.close();
         }
         LOG.debug("Removed connection {} used {} seconds ago. " +
@@ -414,7 +459,7 @@ public class ConnectionManager {
           ConnectionPool pool = this.queue.take();
           try {
             int total = pool.getNumConnections();
-            int active = pool.getNumActiveConnections();
+            int active = pool.getNumActiveConnectionsRecently();
             float poolMinActiveRatio = pool.getMinActiveRatio();
             if (pool.getNumConnections() < pool.getMaxSize() &&
                 active >= poolMinActiveRatio * total) {

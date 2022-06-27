@@ -19,12 +19,12 @@
 package org.apache.hadoop.fs.s3a;
 
 import javax.annotation.Nullable;
+import java.io.Closeable;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.amazonaws.services.s3.model.CompleteMultipartUploadResult;
@@ -37,12 +37,12 @@ import com.amazonaws.services.s3.model.SelectObjectContentRequest;
 import com.amazonaws.services.s3.model.SelectObjectContentResult;
 import com.amazonaws.services.s3.model.UploadPartRequest;
 import com.amazonaws.services.s3.model.UploadPartResult;
-import com.amazonaws.services.s3.transfer.model.UploadResult;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathIOException;
-import org.apache.hadoop.fs.s3a.s3guard.BulkOperationState;
+import org.apache.hadoop.fs.s3a.impl.PutObjectOptions;
+import org.apache.hadoop.fs.store.audit.AuditSpanSource;
 import org.apache.hadoop.util.functional.CallableRaisingIOE;
 
 /**
@@ -54,7 +54,7 @@ import org.apache.hadoop.util.functional.CallableRaisingIOE;
  * use `WriteOperationHelper` directly.
  * @since Hadoop 3.3.0
  */
-public interface WriteOperations {
+public interface WriteOperations extends AuditSpanSource, Closeable {
 
   /**
    * Execute a function with retry processing.
@@ -78,22 +78,25 @@ public interface WriteOperations {
    * @param destKey destination key
    * @param inputStream source data.
    * @param length size, if known. Use -1 for not known
-   * @param headers optional map of custom headers.
+   * @param options options for the request
    * @return the request
    */
   PutObjectRequest createPutObjectRequest(String destKey,
       InputStream inputStream,
       long length,
-      @Nullable Map<String, String> headers);
+      @Nullable PutObjectOptions options);
 
   /**
    * Create a {@link PutObjectRequest} request to upload a file.
    * @param dest key to PUT to.
    * @param sourceFile source file
+   * @param options options for the request
    * @return the request
    */
-  PutObjectRequest createPutObjectRequest(String dest,
-      File sourceFile);
+  PutObjectRequest createPutObjectRequest(
+      String dest,
+      File sourceFile,
+      @Nullable PutObjectOptions options);
 
   /**
    * Callback on a successful write.
@@ -120,11 +123,12 @@ public interface WriteOperations {
    * Start the multipart upload process.
    * Retry policy: retrying, translated.
    * @param destKey destination of upload
+   * @param options options for the put request
    * @return the upload result containing the ID
    * @throws IOException IO problem
    */
   @Retries.RetryTranslated
-  String initiateMultiPartUpload(String destKey) throws IOException;
+  String initiateMultiPartUpload(String destKey, PutObjectOptions options) throws IOException;
 
   /**
    * This completes a multipart upload to the destination key via
@@ -137,6 +141,7 @@ public interface WriteOperations {
    * @param length length of the upload
    * @param errorCount a counter incremented by 1 on every error; for
    * use in statistics
+   * @param putOptions put object options
    * @return the result of the operation.
    * @throws IOException if problems arose which could not be retried, or
    * the retry count was exceeded
@@ -147,7 +152,8 @@ public interface WriteOperations {
       String uploadId,
       List<PartETag> partETags,
       long length,
-      AtomicInteger errorCount)
+      AtomicInteger errorCount,
+      PutObjectOptions putOptions)
       throws IOException;
 
   /**
@@ -185,6 +191,16 @@ public interface WriteOperations {
       throws IOException;
 
   /**
+   * Abort multipart uploads under a path: limited to the first
+   * few hundred.
+   * @param prefix prefix for uploads to abort
+   * @return a count of aborts
+   * @throws IOException trouble; FileNotFoundExceptions are swallowed.
+   */
+  List<MultipartUpload> listMultipartUploads(String prefix)
+      throws IOException;
+
+  /**
    * Abort a multipart commit operation.
    * @param destKey destination key of ongoing operation
    * @param uploadId multipart operation Id
@@ -210,7 +226,7 @@ public interface WriteOperations {
    * @param sourceFile optional source file.
    * @param offset offset in file to start reading.
    * @return the request.
-   * @throws IllegalArgumentException if the parameters are invalid -including
+   * @throws IllegalArgumentException if the parameters are invalid
    * @throws PathIOException if the part number is out of range.
    */
   UploadPartRequest newUploadPartRequest(
@@ -220,40 +236,44 @@ public interface WriteOperations {
       int size,
       InputStream uploadStream,
       File sourceFile,
-      Long offset) throws PathIOException;
+      Long offset) throws IOException;
 
   /**
    * PUT an object directly (i.e. not via the transfer manager).
    * Byte length is calculated from the file length, or, if there is no
    * file, from the content length of the header.
    * @param putObjectRequest the request
+   * @param putOptions put object options
    * @return the upload initiated
    * @throws IOException on problems
    */
   @Retries.RetryTranslated
-  PutObjectResult putObject(PutObjectRequest putObjectRequest)
+  PutObjectResult putObject(PutObjectRequest putObjectRequest,
+      PutObjectOptions putOptions)
       throws IOException;
 
   /**
    * PUT an object via the transfer manager.
+   *
    * @param putObjectRequest the request
-   * @return the result of the operation
+   * @param putOptions put object options
+   *
    * @throws IOException on problems
    */
   @Retries.RetryTranslated
-  UploadResult uploadObject(PutObjectRequest putObjectRequest)
+  void uploadObject(PutObjectRequest putObjectRequest,
+      PutObjectOptions putOptions)
       throws IOException;
 
   /**
    * Revert a commit by deleting the file.
-   * Relies on retry code in filesystem
+   * No attempt is made to probe for/recreate a parent dir marker
+   * Relies on retry code in filesystem.
    * @throws IOException on problems
    * @param destKey destination key
-   * @param operationState operational state for a bulk update
    */
   @Retries.OnceTranslated
-  void revertCommit(String destKey,
-      @Nullable BulkOperationState operationState) throws IOException;
+  void revertCommit(String destKey) throws IOException;
 
   /**
    * This completes a multipart upload to the destination key via
@@ -264,7 +284,6 @@ public interface WriteOperations {
    * @param uploadId multipart operation Id
    * @param partETags list of partial uploads
    * @param length length of the upload
-   * @param operationState operational state for a bulk update
    * @return the result of the operation.
    * @throws IOException if problems arose which could not be retried, or
    * the retry count was exceeded
@@ -274,28 +293,8 @@ public interface WriteOperations {
       String destKey,
       String uploadId,
       List<PartETag> partETags,
-      long length,
-      @Nullable BulkOperationState operationState)
+      long length)
       throws IOException;
-
-  /**
-   * Initiate a commit operation through any metastore.
-   * @param path path under which the writes will all take place.
-   * @return an possibly null operation state from the metastore.
-   * @throws IOException failure to instantiate.
-   */
-  BulkOperationState initiateCommitOperation(
-      Path path) throws IOException;
-
-  /**
-   * Initiate a commit operation through any metastore.
-   * @param path path under which the writes will all take place.
-   * @param operationType operation to initiate
-   * @return an possibly null operation state from the metastore.
-   * @throws IOException failure to instantiate.
-   */
-  BulkOperationState initiateOperation(Path path,
-      BulkOperationState.OperationType operationType) throws IOException;
 
   /**
    * Upload part of a multi-partition file.

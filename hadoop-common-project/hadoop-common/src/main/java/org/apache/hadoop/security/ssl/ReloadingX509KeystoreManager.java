@@ -63,8 +63,8 @@ public class ReloadingX509KeystoreManager extends X509ExtendedKeyManager {
    * @param location local path to the keystore file.
    * @param storePassword password of the keystore file.
    * @param keyPassword The password of the key.
-   * @throws IOException
-   * @throws GeneralSecurityException
+   * @throws IOException raised on errors performing I/O.
+   * @throws GeneralSecurityException thrown if create encryptor error.
    */
   public ReloadingX509KeystoreManager(String type, String location,
                                       String storePassword, String keyPassword)
@@ -143,7 +143,7 @@ public class ReloadingX509KeystoreManager extends X509ExtendedKeyManager {
     LOG.debug(" Loaded KeyStore: " + path.toFile().getAbsolutePath());
 
     KeyManagerFactory keyMgrFactory = KeyManagerFactory.getInstance(
-        SSLFactory.SSLCERTIFICATE);
+        SSLFactory.KEY_MANAGER_SSLCERTIFICATE);
     keyMgrFactory.init(keystore,
         (keyPassword != null) ? keyPassword.toCharArray() : null);
     for (KeyManager candidate: keyMgrFactory.getKeyManagers()) {

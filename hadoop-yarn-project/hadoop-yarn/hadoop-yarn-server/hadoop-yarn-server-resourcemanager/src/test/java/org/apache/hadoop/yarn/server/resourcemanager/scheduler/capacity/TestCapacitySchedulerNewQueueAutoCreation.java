@@ -147,6 +147,8 @@ public class TestCapacitySchedulerNewQueueAutoCreation
     Assert.assertEquals(1f, c.getQueueCapacities().getWeight(), 1e-6);
     Assert.assertEquals(400 * GB,
         c.getQueueResourceQuotas().getEffectiveMinResource().getMemorySize());
+    Assert.assertEquals(((LeafQueue)c).getUserLimitFactor(), -1, 1e-6);
+    Assert.assertEquals(((LeafQueue)c).getMaxAMResourcePerQueuePercent(), 1, 1e-6);
 
     // Now add another queue-d, in the same hierarchy
     createQueue("root.d-auto");
@@ -316,11 +318,40 @@ public class TestCapacitySchedulerNewQueueAutoCreation
     createQueue("root.a.a2-auto");
   }
 
-  @Test(expected = SchedulerDynamicEditException.class)
-  public void testAutoCreateQueueShouldFailIfDepthIsAboveLimit()
+  @Test()
+  public void testAutoCreateMaximumQueueDepth()
       throws Exception {
     startScheduler();
-    createQueue("root.a.a3-auto.a4-auto.a5-auto");
+    // By default, max depth is 2, therefore this is an invalid scenario
+    Assert.assertThrows(SchedulerDynamicEditException.class,
+        () -> createQueue("root.a.a3-auto.a4-auto.a5-auto"));
+
+    // Set depth 3 for root.a, making it a valid scenario
+    csConf.setMaximumAutoCreatedQueueDepth("root.a", 3);
+    cs.reinitialize(csConf, mockRM.getRMContext());
+    try {
+      createQueue("root.a.a3-auto.a4-auto.a5-auto");
+    } catch (SchedulerDynamicEditException sde) {
+      LOG.error("%s", sde);
+      Assert.fail("Depth is set for root.a, exception should not be thrown");
+    }
+
+    // Set global depth to 3
+    csConf.setMaximumAutoCreatedQueueDepth(3);
+    csConf.unset(CapacitySchedulerConfiguration.getQueuePrefix("root.a")
+        + CapacitySchedulerConfiguration.MAXIMUM_QUEUE_DEPTH);
+    cs.reinitialize(csConf, mockRM.getRMContext());
+    try {
+      createQueue("root.a.a6-auto.a7-auto.a8-auto");
+    } catch (SchedulerDynamicEditException sde) {
+      LOG.error("%s", sde);
+      Assert.fail("Depth is set globally, exception should not be thrown");
+    }
+
+    // Set depth on a dynamic queue, which has no effect on auto queue creation validation
+    csConf.setMaximumAutoCreatedQueueDepth("root.a.a6-auto.a7-auto.a8-auto", 10);
+    Assert.assertThrows(SchedulerDynamicEditException.class,
+        () -> createQueue("root.a.a6-auto.a7-auto.a8-auto.a9-auto.a10-auto.a11-auto"));
   }
 
   @Test(expected = SchedulerDynamicEditException.class)
@@ -683,32 +714,70 @@ public class TestCapacitySchedulerNewQueueAutoCreation
         "root.a.*") + "capacity", "6w");
     cs.reinitialize(csConf, mockRM.getRMContext());
 
-    LeafQueue a2 = createQueue("root.a.a-auto.a2");
+    AbstractLeafQueue a2 = createQueue("root.a.a-auto.a2");
     Assert.assertEquals("weight is not set by template", 6f,
         a2.getQueueCapacities().getWeight(), 1e-6);
+    Assert.assertEquals("user limit factor should be disabled with dynamic queues",
+        -1f, a2.getUserLimitFactor(), 1e-6);
+    Assert.assertEquals("maximum AM resource percent should be 1 with dynamic queues",
+        1f, a2.getMaxAMResourcePerQueuePercent(), 1e-6);
+
+    // Set the user-limit-factor and maximum-am-resource-percent via templates to ensure their
+    // modified defaults are indeed overridden
+    csConf.set(AutoCreatedQueueTemplate.getAutoQueueTemplatePrefix(
+        "root.a.*") + "user-limit-factor", "10");
+    csConf.set(AutoCreatedQueueTemplate.getAutoQueueTemplatePrefix(
+        "root.a.*") + "maximum-am-resource-percent", "0.8");
 
     cs.reinitialize(csConf, mockRM.getRMContext());
     a2 = (LeafQueue) cs.getQueue("root.a.a-auto.a2");
     Assert.assertEquals("weight is overridden", 6f,
         a2.getQueueCapacities().getWeight(), 1e-6);
+    Assert.assertEquals("user limit factor should be modified by templates",
+        10f, a2.getUserLimitFactor(), 1e-6);
+    Assert.assertEquals("maximum AM resource percent should be modified by templates",
+        0.8f, a2.getMaxAMResourcePerQueuePercent(), 1e-6);
+
 
     csConf.setNonLabeledQueueWeight("root.a.a-auto.a2", 4f);
     cs.reinitialize(csConf, mockRM.getRMContext());
     Assert.assertEquals("weight is not explicitly set", 4f,
         a2.getQueueCapacities().getWeight(), 1e-6);
+
+    csConf.setBoolean(AutoCreatedQueueTemplate.getAutoQueueTemplatePrefix(
+        "root.a") + CapacitySchedulerConfiguration
+        .AUTO_CREATE_CHILD_QUEUE_AUTO_REMOVAL_ENABLE, false);
+    cs.reinitialize(csConf, mockRM.getRMContext());
+    AbstractLeafQueue a3 = createQueue("root.a.a3");
+    Assert.assertFalse("auto queue deletion should be turned off on a3",
+        a3.isEligibleForAutoDeletion());
+
+    // Set the capacity of label TEST
+    csConf.set(AutoCreatedQueueTemplate.getAutoQueueTemplatePrefix(
+        "root.c") + "accessible-node-labels.TEST.capacity", "6w");
+    csConf.setQueues("root", new String[]{"a", "b", "c"});
+    csConf.setAutoQueueCreationV2Enabled("root.c", true);
+    cs.reinitialize(csConf, mockRM.getRMContext());
+    AbstractLeafQueue c1 = createQueue("root.c.c1");
+    Assert.assertEquals("weight is not set for label TEST", 6f,
+        c1.getQueueCapacities().getWeight("TEST"), 1e-6);
+    cs.reinitialize(csConf, mockRM.getRMContext());
+    c1 = (AbstractLeafQueue) cs.getQueue("root.c.c1");
+    Assert.assertEquals("weight is not set for label TEST", 6f,
+        c1.getQueueCapacities().getWeight("TEST"), 1e-6);
   }
 
   @Test
   public void testAutoCreatedQueueConfigChange() throws Exception {
     startScheduler();
-    LeafQueue a2 = createQueue("root.a.a-auto.a2");
+    AbstractLeafQueue a2 = createQueue("root.a.a-auto.a2");
     csConf.setNonLabeledQueueWeight("root.a.a-auto.a2", 4f);
     cs.reinitialize(csConf, mockRM.getRMContext());
 
     Assert.assertEquals("weight is not explicitly set", 4f,
         a2.getQueueCapacities().getWeight(), 1e-6);
 
-    a2 = (LeafQueue) cs.getQueue("root.a.a-auto.a2");
+    a2 = (AbstractLeafQueue) cs.getQueue("root.a.a-auto.a2");
     csConf.setState("root.a.a-auto.a2", QueueState.STOPPED);
     cs.reinitialize(csConf, mockRM.getRMContext());
     Assert.assertEquals("root.a.a-auto.a2 has not been stopped",
@@ -1137,10 +1206,54 @@ public class TestCapacitySchedulerNewQueueAutoCreation
         "when its dynamic parent is removed", bAutoLeaf);
   }
 
-  protected LeafQueue createQueue(String queuePath) throws YarnException,
+  @Test
+  public void testParentQueueDynamicChildRemoval() throws Exception {
+    startScheduler();
+
+    createQueue("root.a.a-auto");
+    createQueue("root.a.a-auto");
+    AbstractCSQueue aAuto = (AbstractCSQueue) cs.
+        getQueue("root.a.a-auto");
+    Assert.assertTrue(aAuto.isDynamicQueue());
+    ParentQueue a = (ParentQueue) cs.
+        getQueue("root.a");
+    createQueue("root.e.e1-auto");
+    AbstractCSQueue eAuto = (AbstractCSQueue) cs.
+        getQueue("root.e.e1-auto");
+    Assert.assertTrue(eAuto.isDynamicQueue());
+    ParentQueue e = (ParentQueue) cs.
+        getQueue("root.e");
+
+    // Try to remove a static child queue
+    try {
+      a.removeChildQueue(cs.getQueue("root.a.a1"));
+      Assert.fail("root.a.a1 is a static queue and should not be removed at " +
+          "runtime");
+    } catch (SchedulerDynamicEditException ignored) {
+    }
+
+    // Try to remove a dynamic queue with a different parent
+    try {
+      a.removeChildQueue(eAuto);
+      Assert.fail("root.a should not be able to remove root.e.e1-auto");
+    } catch (SchedulerDynamicEditException ignored) {
+    }
+
+    a.removeChildQueue(aAuto);
+    e.removeChildQueue(eAuto);
+
+    aAuto = (AbstractCSQueue) cs.
+        getQueue("root.a.a-auto");
+    eAuto = (AbstractCSQueue) cs.
+        getQueue("root.e.e1-auto");
+
+    Assert.assertNull("root.a.a-auto should have been removed", aAuto);
+    Assert.assertNull("root.e.e1-auto should have been removed", eAuto);
+  }
+
+  protected AbstractLeafQueue createQueue(String queuePath) throws YarnException,
       IOException {
-    return autoQueueHandler.createQueue(
-        CSQueueUtils.extractQueuePath(queuePath));
+    return autoQueueHandler.createQueue(new QueuePath(queuePath));
   }
 
   private void assertQueueMinResource(CSQueue queue, float expected) {

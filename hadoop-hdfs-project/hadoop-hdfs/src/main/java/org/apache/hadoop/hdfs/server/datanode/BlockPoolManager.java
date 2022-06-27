@@ -28,12 +28,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Lists;
+import org.apache.hadoop.util.Sets;
 
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
-import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
+import org.apache.hadoop.util.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Maps;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 import org.slf4j.Logger;
 
 /**
@@ -177,8 +178,8 @@ class BlockPoolManager {
       throws IOException {
     assert Thread.holdsLock(refreshNamenodesLock);
 
-    Set<String> toRefresh = Sets.newLinkedHashSet();
-    Set<String> toAdd = Sets.newLinkedHashSet();
+    Set<String> toRefresh = new LinkedHashSet<>();
+    Set<String> toAdd = new LinkedHashSet<>();
     Set<String> toRemove;
     
     synchronized (this) {
@@ -195,8 +196,8 @@ class BlockPoolManager {
       
       // Step 2. Any nameservices we currently have but are no longer present
       // need to be removed.
-      toRemove = Sets.newHashSet(Sets.difference(
-          bpByNameserviceId.keySet(), addrMap.keySet()));
+      toRemove = Sets.difference(
+          bpByNameserviceId.keySet(), addrMap.keySet());
       
       assert toRefresh.size() + toAdd.size() ==
         addrMap.size() :
@@ -300,5 +301,33 @@ class BlockPoolManager {
       List<InetSocketAddress> lifelineNnAddrs) {
     return new BPOfferService(nameserviceId, nnIds, nnAddrs, lifelineNnAddrs,
         dn);
+  }
+
+  @VisibleForTesting
+  Map<String, BPOfferService> getBpByNameserviceId() {
+    return bpByNameserviceId;
+  }
+
+  boolean isSlownodeByNameserviceId(String nsId) {
+    if (bpByNameserviceId.containsKey(nsId)) {
+      return bpByNameserviceId.get(nsId).isSlownode();
+    }
+    return false;
+  }
+
+  boolean isSlownodeByBlockPoolId(String bpId) {
+    if (bpByBlockPoolId.containsKey(bpId)) {
+      return bpByBlockPoolId.get(bpId).isSlownode();
+    }
+    return false;
+  }
+
+  boolean isSlownode() {
+    for (BPOfferService bpOfferService : bpByBlockPoolId.values()) {
+      if (bpOfferService.isSlownode()) {
+        return true;
+      }
+    }
+    return false;
   }
 }

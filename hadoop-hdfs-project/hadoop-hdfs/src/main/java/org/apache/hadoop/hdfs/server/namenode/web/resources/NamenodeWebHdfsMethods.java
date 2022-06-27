@@ -55,10 +55,9 @@ import javax.ws.rs.core.StreamingOutput;
 import javax.ws.rs.core.Response.ResponseBuilder;
 import javax.ws.rs.core.Response.Status;
 
-import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.InvalidPathException;
 import org.apache.hadoop.fs.QuotaUsage;
 import org.apache.hadoop.fs.StorageType;
-import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,6 +86,7 @@ import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
+import org.apache.hadoop.hdfs.protocol.SnapshotDiffReportListing;
 import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
 import org.apache.hadoop.hdfs.protocol.SnapshotStatus;
 import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
@@ -114,15 +114,12 @@ import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
+import org.apache.hadoop.util.Lists;
 import org.apache.hadoop.util.StringUtils;
 
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Charsets;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import com.sun.jersey.spi.container.ResourceFilters;
-
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 
 /** Web-hdfs NameNode implementation. */
 @Path("")
@@ -137,6 +134,7 @@ public class NamenodeWebHdfsMethods {
   private String scheme;
   private Principal userPrincipal;
   private String remoteAddr;
+  private int remotePort;
 
   private @Context ServletContext context;
   private @Context HttpServletResponse response;
@@ -151,6 +149,7 @@ public class NamenodeWebHdfsMethods {
     // get the remote address, if coming in via a trusted proxy server then
     // the address with be that of the proxied client
     remoteAddr = JspHelper.getRemoteAddr(request);
+    remotePort = JspHelper.getRemotePort(request);
     supportEZ =
         Boolean.valueOf(request.getHeader(WebHdfsFileSystem.EZ_HEADER));
   }
@@ -229,6 +228,10 @@ public class NamenodeWebHdfsMethods {
         return getRemoteAddr();
       }
       @Override
+      public int getRemotePort() {
+        return getRemotePortFromJSPHelper();
+      }
+      @Override
       public InetAddress getHostInetAddress() {
         try {
           return InetAddress.getByName(getHostAddress());
@@ -257,6 +260,10 @@ public class NamenodeWebHdfsMethods {
 
   protected String getRemoteAddr() {
     return remoteAddr;
+  }
+
+  protected int getRemotePortFromJSPHelper() {
+    return remotePort;
   }
 
   protected void queueExternalCall(ExternalCall call)
@@ -395,6 +402,9 @@ public class NamenodeWebHdfsMethods {
       final String path, final HttpOpParam.Op op, final long openOffset,
       final long blocksize, final String excludeDatanodes,
       final Param<?, ?>... parameters) throws URISyntaxException, IOException {
+    if (!DFSUtil.isValidName(path)) {
+      throw new InvalidPathException(path);
+    }
     final DatanodeInfo dn;
     final NamenodeProtocols np = getRPCServer(namenode);
     HdfsFileStatus status = null;
@@ -1042,6 +1052,10 @@ public class NamenodeWebHdfsMethods {
           final SnapshotNameParam snapshotName,
       @QueryParam(OldSnapshotNameParam.NAME) @DefaultValue(OldSnapshotNameParam.DEFAULT)
           final OldSnapshotNameParam oldSnapshotName,
+      @QueryParam(SnapshotDiffStartPathParam.NAME) @DefaultValue(SnapshotDiffStartPathParam.DEFAULT)
+          final SnapshotDiffStartPathParam snapshotDiffStartPath,
+      @QueryParam(SnapshotDiffIndexParam.NAME) @DefaultValue(SnapshotDiffIndexParam.DEFAULT)
+          final SnapshotDiffIndexParam snapshotDiffIndex,
       @QueryParam(TokenKindParam.NAME) @DefaultValue(TokenKindParam.DEFAULT)
           final TokenKindParam tokenKind,
       @QueryParam(TokenServiceParam.NAME) @DefaultValue(TokenServiceParam.DEFAULT)
@@ -1053,7 +1067,9 @@ public class NamenodeWebHdfsMethods {
       ) throws IOException, InterruptedException {
     return get(ugi, delegation, username, doAsUser, ROOT, op, offset, length,
         renewer, bufferSize, xattrNames, xattrEncoding, excludeDatanodes,
-        fsAction, snapshotName, oldSnapshotName, tokenKind, tokenService,
+        fsAction, snapshotName, oldSnapshotName,
+        snapshotDiffStartPath, snapshotDiffIndex,
+        tokenKind, tokenService,
         noredirect, startAfter);
   }
 
@@ -1093,6 +1109,10 @@ public class NamenodeWebHdfsMethods {
           final SnapshotNameParam snapshotName,
       @QueryParam(OldSnapshotNameParam.NAME) @DefaultValue(OldSnapshotNameParam.DEFAULT)
           final OldSnapshotNameParam oldSnapshotName,
+      @QueryParam(SnapshotDiffStartPathParam.NAME) @DefaultValue(SnapshotDiffStartPathParam.DEFAULT)
+          final SnapshotDiffStartPathParam snapshotDiffStartPath,
+      @QueryParam(SnapshotDiffIndexParam.NAME) @DefaultValue(SnapshotDiffIndexParam.DEFAULT)
+          final SnapshotDiffIndexParam snapshotDiffIndex,
       @QueryParam(TokenKindParam.NAME) @DefaultValue(TokenKindParam.DEFAULT)
           final TokenKindParam tokenKind,
       @QueryParam(TokenServiceParam.NAME) @DefaultValue(TokenServiceParam.DEFAULT)
@@ -1113,6 +1133,7 @@ public class NamenodeWebHdfsMethods {
         return get(ugi, delegation, username, doAsUser, path.getAbsolutePath(),
             op, offset, length, renewer, bufferSize, xattrNames, xattrEncoding,
             excludeDatanodes, fsAction, snapshotName, oldSnapshotName,
+            snapshotDiffStartPath, snapshotDiffIndex,
             tokenKind, tokenService, noredirect, startAfter);
       }
     });
@@ -1142,6 +1163,8 @@ public class NamenodeWebHdfsMethods {
       final FsActionParam fsAction,
       final SnapshotNameParam snapshotName,
       final OldSnapshotNameParam oldSnapshotName,
+      final SnapshotDiffStartPathParam snapshotDiffStartPath,
+      final SnapshotDiffIndexParam snapshotDiffIndex,
       final TokenKindParam tokenKind,
       final TokenServiceParam tokenService,
       final NoRedirectParam noredirectParam,
@@ -1340,6 +1363,14 @@ public class NamenodeWebHdfsMethods {
       final String js = JsonUtil.toJsonString(diffReport);
       return Response.ok(js).type(MediaType.APPLICATION_JSON).build();
     }
+    case GETSNAPSHOTDIFFLISTING: {
+      SnapshotDiffReportListing diffReport = cp.getSnapshotDiffReportListing(
+          fullpath, oldSnapshotName.getValue(), snapshotName.getValue(),
+          DFSUtilClient.string2Bytes(snapshotDiffStartPath.getValue()),
+          snapshotDiffIndex.getValue());
+      final String js = JsonUtil.toJsonString(diffReport);
+      return Response.ok(js).type(MediaType.APPLICATION_JSON).build();
+    }
     case GETSNAPSHOTTABLEDIRECTORYLIST: {
       SnapshottableDirectoryStatus[] snapshottableDirectoryList =
           cp.getSnapshottableDirListing();
@@ -1508,13 +1539,10 @@ public class NamenodeWebHdfsMethods {
       @QueryParam(RecursiveParam.NAME) @DefaultValue(RecursiveParam.DEFAULT)
           final RecursiveParam recursive,
       @QueryParam(SnapshotNameParam.NAME) @DefaultValue(SnapshotNameParam.DEFAULT)
-          final SnapshotNameParam snapshotName,
-      @QueryParam(DeleteSkipTrashParam.NAME)
-      @DefaultValue(DeleteSkipTrashParam.DEFAULT)
-          final DeleteSkipTrashParam skiptrash
+          final SnapshotNameParam snapshotName
       ) throws IOException, InterruptedException {
     return delete(ugi, delegation, username, doAsUser, ROOT, op, recursive,
-        snapshotName, skiptrash);
+        snapshotName);
   }
 
   /** Handle HTTP DELETE request. */
@@ -1535,53 +1563,34 @@ public class NamenodeWebHdfsMethods {
       @QueryParam(RecursiveParam.NAME) @DefaultValue(RecursiveParam.DEFAULT)
           final RecursiveParam recursive,
       @QueryParam(SnapshotNameParam.NAME) @DefaultValue(SnapshotNameParam.DEFAULT)
-          final SnapshotNameParam snapshotName,
-      @QueryParam(DeleteSkipTrashParam.NAME)
-      @DefaultValue(DeleteSkipTrashParam.DEFAULT)
-          final DeleteSkipTrashParam skiptrash
+          final SnapshotNameParam snapshotName
       ) throws IOException, InterruptedException {
 
-    init(ugi, delegation, username, doAsUser, path, op, recursive,
-        snapshotName, skiptrash);
+    init(ugi, delegation, username, doAsUser, path, op, recursive, snapshotName);
 
-    return doAs(ugi, () -> delete(
-        path.getAbsolutePath(), op, recursive, snapshotName, skiptrash));
+    return doAs(ugi, new PrivilegedExceptionAction<Response>() {
+      @Override
+      public Response run() throws IOException {
+          return delete(ugi, delegation, username, doAsUser,
+              path.getAbsolutePath(), op, recursive, snapshotName);
+      }
+    });
   }
 
   protected Response delete(
+      final UserGroupInformation ugi,
+      final DelegationParam delegation,
+      final UserParam username,
+      final DoAsParam doAsUser,
       final String fullpath,
       final DeleteOpParam op,
       final RecursiveParam recursive,
-      final SnapshotNameParam snapshotName,
-      final DeleteSkipTrashParam skipTrash) throws IOException {
+      final SnapshotNameParam snapshotName
+      ) throws IOException {
     final ClientProtocol cp = getRpcClientProtocol();
 
     switch(op.getValue()) {
     case DELETE: {
-      Configuration conf =
-          (Configuration) context.getAttribute(JspHelper.CURRENT_CONF);
-      long trashInterval =
-          conf.getLong(FS_TRASH_INTERVAL_KEY, FS_TRASH_INTERVAL_DEFAULT);
-      if (trashInterval > 0 && !skipTrash.getValue()) {
-        LOG.info("{} is {} , trying to archive {} instead of removing",
-            FS_TRASH_INTERVAL_KEY, trashInterval, fullpath);
-        org.apache.hadoop.fs.Path path =
-            new org.apache.hadoop.fs.Path(fullpath);
-        Configuration clonedConf = new Configuration(conf);
-        // To avoid caching FS objects and prevent OOM issues
-        clonedConf.set("fs.hdfs.impl.disable.cache", "true");
-        FileSystem fs = FileSystem.get(clonedConf);
-        boolean movedToTrash = Trash.moveToAppropriateTrash(fs, path,
-            clonedConf);
-        if (movedToTrash) {
-          final String js = JsonUtil.toJsonString("boolean", true);
-          return Response.ok(js).type(MediaType.APPLICATION_JSON).build();
-        }
-        // Same is the behavior with Delete shell command.
-        // If moveToAppropriateTrash() returns false, file deletion
-        // is attempted rather than throwing Error.
-        LOG.debug("Could not move {} to Trash, attempting removal", fullpath);
-      }
       final boolean b = cp.delete(fullpath, recursive.getValue());
       final String js = JsonUtil.toJsonString("boolean", b);
       return Response.ok(js).type(MediaType.APPLICATION_JSON).build();

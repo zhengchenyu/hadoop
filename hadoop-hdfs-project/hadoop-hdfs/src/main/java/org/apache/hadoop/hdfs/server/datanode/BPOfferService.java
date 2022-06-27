@@ -17,10 +17,8 @@
  */
 package org.apache.hadoop.hdfs.server.datanode;
 
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
+import org.apache.hadoop.classification.VisibleForTesting;
+import org.apache.hadoop.util.Preconditions;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.StorageType;
@@ -33,6 +31,8 @@ import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
 import org.apache.hadoop.hdfs.server.protocol.*;
 import org.apache.hadoop.hdfs.server.protocol.BlockECReconstructionCommand.BlockECReconstructionInfo;
 import org.apache.hadoop.hdfs.server.protocol.ReceivedDeletedBlockInfo.BlockStatus;
+import org.apache.hadoop.util.Lists;
+import org.apache.hadoop.util.Sets;
 
 import org.slf4j.Logger;
 
@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -81,7 +82,7 @@ class BPOfferService {
    * this can be null. If non-null, this must always refer to a member
    * of the {@link #bpServices} list.
    */
-  private BPServiceActor bpServiceToActive = null;
+  private volatile BPServiceActor bpServiceToActive = null;
   
   /**
    * The list of all actors for namenodes in this nameservice, regardless
@@ -143,11 +144,11 @@ class BPOfferService {
   void refreshNNList(String serviceId, List<String> nnIds,
       ArrayList<InetSocketAddress> addrs,
       ArrayList<InetSocketAddress> lifelineAddrs) throws IOException {
-    Set<InetSocketAddress> oldAddrs = Sets.newHashSet();
+    Set<InetSocketAddress> oldAddrs = new HashSet<>();
     for (BPServiceActor actor : bpServices) {
       oldAddrs.add(actor.getNNSocketAddress());
     }
-    Set<InetSocketAddress> newAddrs = Sets.newHashSet(addrs);
+    Set<InetSocketAddress> newAddrs = new HashSet<>(addrs);
     
     // Process added NNs
     Set<InetSocketAddress> addedNNs = Sets.difference(newAddrs, oldAddrs);
@@ -378,7 +379,7 @@ class BPOfferService {
 
     if(nsInfo.getState() == HAServiceState.ACTIVE
         && bpServiceToActive == null) {
-      LOG.info("Acknowledging ACTIVE Namenode during handshake" + actor);
+      LOG.info("Acknowledging ACTIVE Namenode during handshake {}", actor);
       bpServiceToActive = actor;
     }
 
@@ -813,7 +814,8 @@ class BPOfferService {
       BPServiceActor actor) throws IOException {
     switch(cmd.getAction()) {
     case DatanodeProtocol.DNA_ACCESSKEYUPDATE:
-      LOG.info("DatanodeCommand action from standby: DNA_ACCESSKEYUPDATE");
+      LOG.info("DatanodeCommand action from standby NN {}: DNA_ACCESSKEYUPDATE",
+          actor.getNNSocketAddress());
       if (dn.isBlockTokenEnabled) {
         dn.blockPoolTokenSecretManager.addKeys(
             getBlockPoolId(), 
@@ -829,10 +831,12 @@ class BPOfferService {
     case DatanodeProtocol.DNA_CACHE:
     case DatanodeProtocol.DNA_UNCACHE:
     case DatanodeProtocol.DNA_ERASURE_CODING_RECONSTRUCTION:
-      LOG.warn("Got a command from standby NN - ignoring command:" + cmd.getAction());
+      LOG.warn("Got a command from standby NN {} - ignoring command: {}",
+          actor.getNNSocketAddress(), cmd.getAction());
       break;
     default:
-      LOG.warn("Unknown DatanodeCommand action: " + cmd.getAction());
+      LOG.warn("Unknown DatanodeCommand action: {} from standby NN {}",
+          cmd.getAction(), actor.getNNSocketAddress());
     }
     return true;
   }
@@ -850,4 +854,12 @@ class BPOfferService {
     return isAlive();
   }
 
+  boolean isSlownode() {
+    for (BPServiceActor actor : bpServices) {
+      if (actor.isSlownode()) {
+        return true;
+      }
+    }
+    return false;
+  }
 }

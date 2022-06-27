@@ -141,12 +141,39 @@
       <groupId>com.sun.jersey</groupId>
       <artifactId>jersey-servlet</artifactId>
       <scope>compile</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>javax.enterprise</groupId>
+          <artifactId>cdi-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>javax.servlet</groupId>
+          <artifactId>servlet-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>ch.qos.cal10n</groupId>
+          <artifactId>cal10n-api</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
-      <!-- Used, even though 'mvn dependency:analyze' doesn't find it -->
-      <groupId>com.sun.jersey</groupId>
+      <groupId>com.github.pjfanning</groupId>
       <artifactId>jersey-json</artifactId>
       <scope>compile</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.jaxrs</groupId>
+          <artifactId>jackson-jaxrs-json-provider</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>com.sun.jersey</groupId>
@@ -187,6 +214,12 @@
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-configuration2</artifactId>
       <scope>compile</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>javax.servlet</groupId>
+          <artifactId>servlet-api</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
@@ -310,6 +343,10 @@
       </exclusions>
     </dependency>
     <dependency>
+      <groupId>io.dropwizard.metrics</groupId>
+      <artifactId>metrics-core</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper</artifactId>
       <type>test-jar</type>
@@ -413,7 +450,12 @@
           </execution>
           <execution>
             <id>src-test-compile-protoc</id>
-            <configuration><skip>false</skip></configuration>
+            <configuration>
+              <skip>false</skip>
+              <excludes>
+                <exclude>*legacy.proto</exclude>
+              </excludes>
+            </configuration>
           </execution>
         </executions>
       </plugin>
@@ -434,6 +476,10 @@
             <id>replace-generated-test-sources</id>
             <configuration>
               <skip>false</skip>
+              <excludes>
+                <exclude>**/TestProtosLegacy.java</exclude>
+                <exclude>**/TestRpcServiceProtosLegacy.java</exclude>
+              </excludes>
             </configuration>
           </execution>
           <execution>
@@ -446,6 +492,7 @@
                 <exclude>**/RpcWritable.java</exclude>
                 <exclude>**/ProtobufRpcEngineCallback.java</exclude>
                 <exclude>**/ProtobufRpcEngine.java</exclude>
+                <exclude>**/ProtobufRpcEngine2.java</exclude>
                 <exclude>**/ProtobufRpcEngineProtos.java</exclude>
               </excludes>
             </configuration>
@@ -454,6 +501,9 @@
             <id>replace-test-sources</id>
             <configuration>
               <skip>false</skip>
+              <excludes>
+                <exclude>**/TestProtoBufRpc.java</exclude>
+              </excludes>
             </configuration>
           </execution>
         </executions>
@@ -898,7 +948,6 @@
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-surefire-plugin</artifactId>
             <configuration>
-              <testFailureIgnore>${ignoreTestFailure}</testFailureIgnore>
               <forkCount>${testsThreadCount}</forkCount>
               <reuseForks>false</reuseForks>
               <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
@@ -1045,6 +1094,18 @@
                   </sources>
                 </configuration>
               </execution>
+              <execution>
+                <id>add-test-source-legacy-protobuf</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>add-test-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>${basedir}/src/test/arm-java</source>
+                  </sources>
+                </configuration>
+              </execution>
             </executions>
           </plugin>
         </plugins>
@@ -1086,7 +1147,39 @@
                   </includes>
                 </configuration>
               </execution>
+              <execution>
+                <id>src-test-compile-protoc-legacy</id>
+                <phase>generate-test-sources</phase>
+                <goals>
+                  <goal>compile</goal>
+                </goals>
+                <configuration>
+                  <skip>false</skip>
+                  <!--Generating with old protobuf version for backward compatibility-->
+                  <protocArtifact>
+                    com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}
+                  </protocArtifact>
+                  <includeDependenciesInDescriptorSet>false</includeDependenciesInDescriptorSet>
+                  <protoSourceRoot>${basedir}/src/test/proto</protoSourceRoot>
+                  <outputDirectory>${project.build.directory}/generated-test-sources/java</outputDirectory>
+                  <clearOutputDirectory>false</clearOutputDirectory>
+                  <includes>
+                    <include>test_legacy.proto</include>
+                    <include>test_rpc_service_legacy.proto</include>
+                  </includes>
+                </configuration>
+              </execution>
              </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <configuration>
+              <sourceFileExcludes>
+                <sourceFileExclude>**/FSProtos.java</sourceFileExclude>
+              </sourceFileExcludes>
+              <excludePackageNames>*.proto:*.tracing:*.protobuf</excludePackageNames>
+            </configuration>
           </plugin>
         </plugins>
       </build>

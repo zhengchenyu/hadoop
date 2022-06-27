@@ -101,7 +101,7 @@ public interface S3ClientFactory {
     private boolean pathStyleAccess;
 
     /**
-     * This is in the settings awaiting wiring up and testing.
+     * Permit requests to requester pays buckets.
      */
     private boolean requesterPays;
 
@@ -115,6 +115,11 @@ public interface S3ClientFactory {
      */
     private String userAgentSuffix = "";
 
+    /**
+     * List of request handlers to include in the chain
+     * of request execution in the SDK.
+     * @return the handler list
+     */
     public List<RequestHandler2> getRequestHandlers() {
       return requestHandlers;
     }
@@ -163,7 +168,7 @@ public interface S3ClientFactory {
     }
 
     /**
-     * Requester pays option. Not yet wired up.
+     * Set requester pays option.
      * @param value new value
      * @return the builder
      */

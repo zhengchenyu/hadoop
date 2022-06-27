@@ -56,6 +56,7 @@ import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileContext;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -65,6 +66,7 @@ import org.apache.hadoop.io.SecureIOUtils;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.file.tfile.TFile;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Sets;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.LogAggregationContext;
@@ -73,9 +75,13 @@ import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.util.Times;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Iterables;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
+
+import static org.apache.hadoop.fs.Options.OpenFileOptions.FS_OPTION_OPENFILE_READ_POLICY;
+import static org.apache.hadoop.fs.Options.OpenFileOptions.FS_OPTION_OPENFILE_READ_POLICY_SEQUENTIAL;
+import static org.apache.hadoop.fs.Options.OpenFileOptions.FS_OPTION_OPENFILE_LENGTH;
+import static org.apache.hadoop.util.functional.FutureIO.awaitFuture;
 
 @Public
 @Evolving
@@ -565,7 +571,7 @@ public class AggregatedLogFormat {
 
   @Public
   @Evolving
-  public static class LogReader {
+  public static class LogReader implements AutoCloseable {
 
     private final FSDataInputStream fsDataIStream;
     private final TFile.Reader.Scanner scanner;
@@ -576,9 +582,16 @@ public class AggregatedLogFormat {
       try {
         FileContext fileContext =
             FileContext.getFileContext(remoteAppLogFile.toUri(), conf);
-        this.fsDataIStream = fileContext.open(remoteAppLogFile);
+        FileStatus status = fileContext.getFileStatus(remoteAppLogFile);
+        this.fsDataIStream = awaitFuture(
+            fileContext.openFile(remoteAppLogFile)
+                .opt(FS_OPTION_OPENFILE_READ_POLICY,
+                    FS_OPTION_OPENFILE_READ_POLICY_SEQUENTIAL)
+                .opt(FS_OPTION_OPENFILE_LENGTH,
+                    status.getLen())   // file length hint for object stores
+                .build());
         reader = new TFile.Reader(this.fsDataIStream,
-            fileContext.getFileStatus(remoteAppLogFile).getLen(), conf);
+            status.getLen(), conf);
         this.scanner = reader.createScanner();
       } catch (IOException ioe) {
         close();

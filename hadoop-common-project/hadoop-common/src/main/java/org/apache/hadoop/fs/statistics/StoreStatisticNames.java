@@ -40,6 +40,9 @@ public final class StoreStatisticNames {
   /** {@value}. */
   public static final String OP_ABORT = "op_abort";
 
+  /** access() API call {@value}. */
+  public static final String OP_ACCESS = "op_access";
+
   /** {@value}. */
   public static final String OP_APPEND = "op_append";
 
@@ -49,6 +52,9 @@ public final class StoreStatisticNames {
 
   /** {@value}. */
   public static final String OP_CREATE = "op_create";
+
+  /** {@value}. */
+  public static final String OP_CREATE_FILE = "op_createfile";
 
   /** {@value}. */
   public static final String OP_CREATE_NON_RECURSIVE =
@@ -110,7 +116,13 @@ public final class StoreStatisticNames {
   public static final String OP_MODIFY_ACL_ENTRIES = "op_modify_acl_entries";
 
   /** {@value}. */
+  public static final String OP_MSYNC = "op_msync";
+
+  /** {@value}. */
   public static final String OP_OPEN = "op_open";
+
+  /** Call to openFile() {@value}. */
+  public static final String OP_OPENFILE = "op_openfile";
 
   /** {@value}. */
   public static final String OP_REMOVE_ACL = "op_remove_acl";
@@ -161,9 +173,16 @@ public final class StoreStatisticNames {
   public static final String DELEGATION_TOKENS_ISSUED
       = "delegation_tokens_issued";
 
+  /** Probe for store existing: {@value}. */
+  public static final String STORE_EXISTS_PROBE
+      = "store_exists_probe";
+
   /** Requests throttled and retried: {@value}. */
   public static final String STORE_IO_THROTTLED
       = "store_io_throttled";
+
+  /** Rate limiting was reported {@value}. */
+  public static final String STORE_IO_RATE_LIMITED = "store_io_rate_limited";
 
   /** Requests made of a store: {@value}. */
   public static final String STORE_IO_REQUEST
@@ -311,6 +330,12 @@ public final class StoreStatisticNames {
       "action_executor_acquired";
 
   /**
+   * A file was opened: {@value}.
+   */
+  public static final String ACTION_FILE_OPENED
+      = "action_file_opened";
+
+  /**
    * An HTTP HEAD request was made: {@value}.
    */
   public static final String ACTION_HTTP_HEAD_REQUEST
@@ -378,6 +403,9 @@ public final class StoreStatisticNames {
 
   public static final String MULTIPART_UPLOAD_STARTED
       = "multipart_upload_started";
+
+  public static final String MULTIPART_UPLOAD_LIST
+      = "multipart_upload_list";
 
   private StoreStatisticNames() {
   }

@@ -23,12 +23,13 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.s3a.impl.ChangeDetectionPolicy;
 import org.apache.hadoop.fs.s3a.statistics.S3AStatisticsContext;
+import org.apache.hadoop.fs.store.audit.AuditSpan;
 
 import javax.annotation.Nullable;
 
-import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
+import org.apache.hadoop.util.Preconditions;
 
-import static org.apache.hadoop.thirdparty.com.google.common.base.Preconditions.checkNotNull;
+import static java.util.Objects.requireNonNull;
 
 /**
  * Read-specific operation context struct.
@@ -43,66 +44,76 @@ public class S3AReadOpContext extends S3AOpContext {
   /**
    * Initial input policy of the stream.
    */
-  private final S3AInputPolicy inputPolicy;
+  private S3AInputPolicy inputPolicy;
 
   /**
    * How to detect and deal with the object being updated during read.
    */
-  private final ChangeDetectionPolicy changeDetectionPolicy;
+  private ChangeDetectionPolicy changeDetectionPolicy;
 
   /**
    * Readahead for GET operations/skip, etc.
    */
-  private final long readahead;
+  private long readahead;
+
+  private AuditSpan auditSpan;
+
+  /**
+   * Threshold for stream reads to switch to
+   * asynchronous draining.
+   */
+  private long asyncDrainThreshold;
+
+  /**
+   * Vectored IO context for vectored read api
+   * in {@code S3AInputStream#readVectored(List, IntFunction)}.
+   */
+  private final VectoredIOContext vectoredIOContext;
 
   /**
    * Instantiate.
    * @param path path of read
-   * @param isS3GuardEnabled true iff S3Guard is enabled.
    * @param invoker invoker for normal retries.
-   * @param s3guardInvoker S3Guard-specific retry invoker.
    * @param stats Fileystem statistics (may be null)
    * @param instrumentation statistics context
    * @param dstFileStatus target file status
-   * @param inputPolicy the input policy
-   * @param readahead readahead for GET operations/skip, etc.
-   * @param changeDetectionPolicy change detection policy.
+   * @param vectoredIOContext context for vectored read operation.
    */
   public S3AReadOpContext(
       final Path path,
-      boolean isS3GuardEnabled,
       Invoker invoker,
-      @Nullable Invoker s3guardInvoker,
       @Nullable FileSystem.Statistics stats,
       S3AStatisticsContext instrumentation,
       FileStatus dstFileStatus,
-      S3AInputPolicy inputPolicy,
-      ChangeDetectionPolicy changeDetectionPolicy,
-      final long readahead) {
-
-    super(isS3GuardEnabled, invoker, s3guardInvoker, stats, instrumentation,
+      VectoredIOContext vectoredIOContext) {
+    super(invoker, stats, instrumentation,
         dstFileStatus);
-    this.path = checkNotNull(path);
+    this.path = requireNonNull(path);
+    this.vectoredIOContext = requireNonNull(vectoredIOContext, "vectoredIOContext");
+  }
+
+  /**
+   * validate the context.
+   * @return a read operation context ready for use.
+   */
+  public S3AReadOpContext build() {
+    requireNonNull(inputPolicy, "inputPolicy");
+    requireNonNull(changeDetectionPolicy, "changeDetectionPolicy");
+    requireNonNull(auditSpan, "auditSpan");
+    requireNonNull(inputPolicy, "inputPolicy");
     Preconditions.checkArgument(readahead >= 0,
         "invalid readahead %d", readahead);
-    this.inputPolicy = checkNotNull(inputPolicy);
-    this.changeDetectionPolicy = checkNotNull(changeDetectionPolicy);
-    this.readahead = readahead;
+    Preconditions.checkArgument(asyncDrainThreshold >= 0,
+        "invalid drainThreshold %d", asyncDrainThreshold);
+    return this;
   }
 
   /**
    * Get invoker to use for read operations.
-   * When S3Guard is enabled we use the S3Guard invoker,
-   * which deals with things like FileNotFoundException
-   * differently.
    * @return invoker to use for read codepaths
    */
   public Invoker getReadInvoker() {
-    if (isS3GuardEnabled) {
-      return s3guardInvoker;
-    } else {
-      return invoker;
-    }
+    return invoker;
   }
 
   /**
@@ -131,6 +142,77 @@ public class S3AReadOpContext extends S3AOpContext {
    */
   public long getReadahead() {
     return readahead;
+  }
+
+  /**
+   * Get the audit which was active when the file was opened.
+   * @return active span
+   */
+  public AuditSpan getAuditSpan() {
+    return auditSpan;
+  }
+
+  /**
+   * Set builder value.
+   * @param value new value
+   * @return the builder
+   */
+  public S3AReadOpContext withInputPolicy(final S3AInputPolicy value) {
+    inputPolicy = value;
+    return this;
+  }
+
+  /**
+   * Set builder value.
+   * @param value new value
+   * @return the builder
+   */
+  public S3AReadOpContext withChangeDetectionPolicy(
+      final ChangeDetectionPolicy value) {
+    changeDetectionPolicy = value;
+    return this;
+  }
+
+  /**
+   * Set builder value.
+   * @param value new value
+   * @return the builder
+   */
+  public S3AReadOpContext withReadahead(final long value) {
+    readahead = value;
+    return this;
+  }
+
+  /**
+   * Set builder value.
+   * @param value new value
+   * @return the builder
+   */
+  public S3AReadOpContext withAuditSpan(final AuditSpan value) {
+    auditSpan = value;
+    return this;
+  }
+
+  /**
+   * Set builder value.
+   * @param value new value
+   * @return the builder
+   */
+  public S3AReadOpContext withAsyncDrainThreshold(final long value) {
+    asyncDrainThreshold = value;
+    return this;
+  }
+
+  public long getAsyncDrainThreshold() {
+    return asyncDrainThreshold;
+  }
+
+  /**
+   * Get Vectored IO context for this this read op.
+   * @return vectored IO context.
+   */
+  public VectoredIOContext getVectoredIOContext() {
+    return vectoredIOContext;
   }
 
   @Override

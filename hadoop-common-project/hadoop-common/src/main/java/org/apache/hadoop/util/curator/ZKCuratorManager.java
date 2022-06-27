@@ -28,18 +28,22 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.api.transaction.CuratorOp;
 import org.apache.curator.retry.RetryNTimes;
+import org.apache.curator.utils.ZookeeperFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.util.ZKUtil;
 import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.client.ZKClientConfig;
 import org.apache.zookeeper.data.ACL;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
+import org.apache.hadoop.util.Preconditions;
 
 /**
  * Helper class that provides utility methods specific to ZK operations.
@@ -79,8 +83,11 @@ public final class ZKCuratorManager {
 
   /**
    * Utility method to fetch the ZK ACLs from the configuration.
+   *
+   * @param conf configuration.
    * @throws java.io.IOException if the Zookeeper ACLs configuration file
    * cannot be read
+   * @return acl list.
    */
   public static List<ACL> getZKAcls(Configuration conf) throws IOException {
     // Parse authentication from configuration.
@@ -98,9 +105,12 @@ public final class ZKCuratorManager {
 
   /**
    * Utility method to fetch ZK auth info from the configuration.
+   *
+   * @param conf configuration.
    * @throws java.io.IOException if the Zookeeper ACLs configuration file
    * cannot be read
    * @throws ZKUtil.BadAuthFormatException if the auth format is invalid
+   * @return ZKAuthInfo List.
    */
   public static List<ZKUtil.ZKAuthInfo> getZKAuths(Configuration conf)
       throws IOException {
@@ -148,6 +158,8 @@ public final class ZKCuratorManager {
 
     CuratorFramework client = CuratorFrameworkFactory.builder()
         .connectString(zkHostPort)
+        .zookeeperFactory(new HadoopZookeeperFactory(
+            conf.get(CommonConfigurationKeys.ZK_SERVER_PRINCIPAL)))
         .sessionTimeoutMs(zkSessionTimeout)
         .retryPolicy(retryPolicy)
         .authorization(authInfos)
@@ -161,7 +173,7 @@ public final class ZKCuratorManager {
    * Get ACLs for a ZNode.
    * @param path Path of the ZNode.
    * @return The list of ACLs.
-   * @throws Exception
+   * @throws Exception If it cannot contact Zookeeper.
    */
   public List<ACL> getACL(final String path) throws Exception {
     return curator.getACL().forPath(path);
@@ -180,7 +192,7 @@ public final class ZKCuratorManager {
   /**
    * Get the data in a ZNode.
    * @param path Path of the ZNode.
-   * @param stat
+   * @param stat stat.
    * @return The data in the ZNode.
    * @throws Exception If it cannot contact Zookeeper.
    */
@@ -357,7 +369,10 @@ public final class ZKCuratorManager {
 
   /**
    * Deletes the path. Checks for existence of path as well.
+   *
    * @param path Path to be deleted.
+   * @param fencingNodePath fencingNodePath.
+   * @param fencingACL fencingACL.
    * @throws Exception if any problem occurs while performing deletion.
    */
   public void safeDelete(final String path, List<ACL> fencingACL,
@@ -426,6 +441,29 @@ public final class ZKCuratorManager {
       curatorOperations.add(curator.transactionOp().setData()
                               .withVersion(version)
                               .forPath(path, data));
+    }
+  }
+
+  public static class HadoopZookeeperFactory implements ZookeeperFactory {
+    private final String zkPrincipal;
+
+    public HadoopZookeeperFactory(String zkPrincipal) {
+      this.zkPrincipal = zkPrincipal;
+    }
+
+    @Override
+    public ZooKeeper newZooKeeper(String connectString, int sessionTimeout,
+                                  Watcher watcher, boolean canBeReadOnly
+    ) throws Exception {
+      ZKClientConfig zkClientConfig = new ZKClientConfig();
+      if (zkPrincipal != null) {
+        LOG.info("Configuring zookeeper to use {} as the server principal",
+            zkPrincipal);
+        zkClientConfig.setProperty(ZKClientConfig.ZK_SASL_CLIENT_USERNAME,
+            zkPrincipal);
+      }
+      return new ZooKeeper(connectString, sessionTimeout, watcher,
+          canBeReadOnly, zkClientConfig);
     }
   }
 }

@@ -21,14 +21,12 @@ package org.apache.hadoop.security.ssl;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -136,8 +134,8 @@ public final class ReloadingX509TrustManager implements X509TrustManager {
       in.close();
     }
 
-    TrustManagerFactory trustManagerFactory = 
-      TrustManagerFactory.getInstance(SSLFactory.SSLCERTIFICATE);
+    TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(
+        SSLFactory.TRUST_MANAGER_SSLCERTIFICATE);
     trustManagerFactory.init(ks);
     TrustManager[] trustManagers = trustManagerFactory.getTrustManagers();
     for (TrustManager trustManager1 : trustManagers) {

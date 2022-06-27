@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.datanode;
 
-import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
+import org.apache.hadoop.util.Preconditions;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.hdfs.DFSUtilClient;
@@ -597,7 +597,7 @@ final class BlockChecksumHelper {
     private void checksumBlock(ExtendedBlock block, int blockIdx,
                                Token<BlockTokenIdentifier> blockToken,
                                DatanodeInfo targetDatanode) throws IOException {
-      int timeout = 3000;
+      int timeout = getDatanode().getDnConf().getEcChecksumSocketTimeout();
       try (IOStreamPair pair = getDatanode().connectToDN(targetDatanode,
           timeout, block, blockToken)) {
 

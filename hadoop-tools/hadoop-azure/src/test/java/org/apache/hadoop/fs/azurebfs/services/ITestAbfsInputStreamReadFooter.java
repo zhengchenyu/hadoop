@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.azurebfs.AbfsConfiguration;
 import org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem;
+import org.apache.hadoop.fs.azurebfs.utils.TracingContext;
 
 import static java.lang.Math.max;
 import static java.lang.Math.min;
@@ -234,14 +235,14 @@ public class ITestAbfsInputStreamReadFooter extends ITestAbfsInputStream {
       assertEquals(expectedBCurson, abfsInputStream.getBCursor());
       assertEquals(actualLength, bytesRead);
       //  Verify user-content read
-      assertContentReadCorrectly(fileContent, seekPos, (int) actualLength, buffer);
+      assertContentReadCorrectly(fileContent, seekPos, (int) actualLength, buffer, testFilePath);
       //  Verify data read to AbfsInputStream buffer
       int from = seekPos;
       if (optimizationOn) {
         from = (int) max(0, actualContentLength - bufferSize);
       }
       assertContentReadCorrectly(fileContent, from, (int) abfsInputStream.getLimit(),
-          abfsInputStream.getBuffer());
+          abfsInputStream.getBuffer(), testFilePath);
     }
   }
 
@@ -270,7 +271,8 @@ public class ITestAbfsInputStreamReadFooter extends ITestAbfsInputStream {
           .getWrappedStream();
       abfsInputStream = spy(abfsInputStream);
       doReturn(10).doReturn(10).doCallRealMethod().when(abfsInputStream)
-          .readRemote(anyLong(), any(), anyInt(), anyInt());
+          .readRemote(anyLong(), any(), anyInt(), anyInt(),
+              any(TracingContext.class));
 
       iStream = new FSDataInputStream(abfsInputStream);
       seek(iStream, seekPos);
@@ -278,7 +280,7 @@ public class ITestAbfsInputStreamReadFooter extends ITestAbfsInputStream {
       byte[] buffer = new byte[length];
       int bytesRead = iStream.read(buffer, 0, length);
       assertEquals(length, bytesRead);
-      assertContentReadCorrectly(fileContent, seekPos, length, buffer);
+      assertContentReadCorrectly(fileContent, seekPos, length, buffer, testFilePath);
       assertEquals(fileContent.length, abfsInputStream.getFCursor());
       assertEquals(length, abfsInputStream.getBCursor());
       assertTrue(abfsInputStream.getLimit() >= length);
@@ -319,7 +321,8 @@ public class ITestAbfsInputStreamReadFooter extends ITestAbfsInputStream {
               - someDataLength;
       doReturn(10).doReturn(secondReturnSize).doCallRealMethod()
           .when(abfsInputStream)
-          .readRemote(anyLong(), any(), anyInt(), anyInt());
+          .readRemote(anyLong(), any(), anyInt(), anyInt(),
+              any(TracingContext.class));
 
       iStream = new FSDataInputStream(abfsInputStream);
       seek(iStream, seekPos);

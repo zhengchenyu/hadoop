@@ -53,6 +53,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -83,8 +84,6 @@ import org.apache.hadoop.test.LambdaTestUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-
-import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 
 public class TestDFSUtil {
 
@@ -1043,10 +1042,10 @@ public class TestDFSUtil {
 
     {
       Collection<String> internal = DFSUtil.getInternalNameServices(conf);
-      assertEquals(Sets.newHashSet("nn1"), internal);
+      assertEquals(new HashSet<>(Arrays.asList("nn1")), internal);
 
       Collection<String> all = DFSUtilClient.getNameServiceIds(conf);
-      assertEquals(Sets.newHashSet("nn1", "nn2"), all);
+      assertEquals(new HashSet<>(Arrays.asList("nn1", "nn2")), all);
     }
 
     Map<String, Map<String, InetSocketAddress>> nnMap = DFSUtil

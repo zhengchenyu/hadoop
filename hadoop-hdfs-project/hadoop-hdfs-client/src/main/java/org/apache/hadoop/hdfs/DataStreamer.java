@@ -38,11 +38,12 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.BlockWrite;
@@ -525,11 +526,13 @@ class DataStreamer extends Daemon {
   // List of congested data nodes. The stream will back off if the DataNodes
   // are congested
   private final List<DatanodeInfo> congestedNodes = new ArrayList<>();
+  private final Map<DatanodeInfo, Integer> slowNodeMap = new HashMap<>();
   private static final int CONGESTION_BACKOFF_MEAN_TIME_IN_MS = 5000;
   private static final int CONGESTION_BACK_OFF_MAX_TIME_IN_MS =
       CONGESTION_BACKOFF_MEAN_TIME_IN_MS * 10;
   private int lastCongestionBackoffTime;
   private int maxPipelineRecoveryRetries;
+  private int markSlowNodeAsBadNodeThreshold;
 
   protected final LoadingCache<DatanodeInfo, DatanodeInfo> excludedNodes;
   private final String[] favoredNodes;
@@ -559,6 +562,7 @@ class DataStreamer extends Daemon {
     this.errorState = new ErrorState(conf.getDatanodeRestartTimeout());
     this.addBlockFlags = flags;
     this.maxPipelineRecoveryRetries = conf.getMaxPipelineRecoveryRetries();
+    this.markSlowNodeAsBadNodeThreshold = conf.getMarkSlowNodeAsBadNodeThreshold();
   }
 
   /**
@@ -687,11 +691,6 @@ class DataStreamer extends Daemon {
             continue;
           }
           // get packet to be sent.
-          try {
-            backOffIfNecessary();
-          } catch (InterruptedException e) {
-            LOG.debug("Thread interrupted", e);
-          }
           one = dataQueue.getFirst(); // regular data packet
           SpanContext[] parents = one.getTraceParents();
           if (parents != null && parents.length > 0) {
@@ -702,6 +701,14 @@ class DataStreamer extends Daemon {
                 newScope("dataStreamer", parents[0], false);
             //scope.getSpan().setParents(parents);
           }
+        }
+
+        // The DataStreamer has to release the dataQueue before sleeping,
+        // otherwise it will cause the ResponseProcessor to accept the ACK delay.
+        try {
+          backOffIfNecessary();
+        } catch (InterruptedException e) {
+          LOG.debug("Thread interrupted", e);
         }
 
         // get new block from namenode.
@@ -783,7 +790,19 @@ class DataStreamer extends Daemon {
         // Is this block full?
         if (one.isLastPacketInBlock()) {
           // wait for the close packet has been acked
-          waitForAllAcks();
+          try {
+            waitForAllAcks();
+          } catch (IOException ioe) {
+            // No need to do a close recovery if the last packet was acked.
+            // i.e. ackQueue is empty.  waitForAllAcks() can get an exception
+            // (e.g. connection reset) while sending a heartbeat packet,
+            // if the DN sends the final ack and closes the connection.
+            synchronized (dataQueue) {
+              if (!ackQueue.isEmpty()) {
+                throw ioe;
+              }
+            }
+          }
           if (shouldStop()) {
             continue;
           }
@@ -1140,12 +1159,17 @@ class DataStreamer extends Daemon {
           long seqno = ack.getSeqno();
           // processes response status from datanodes.
           ArrayList<DatanodeInfo> congestedNodesFromAck = new ArrayList<>();
+          ArrayList<DatanodeInfo> slownodesFromAck = new ArrayList<>();
           for (int i = ack.getNumOfReplies()-1; i >=0  && dfsClient.clientRunning; i--) {
             final Status reply = PipelineAck.getStatusFromHeader(ack
                 .getHeaderFlag(i));
             if (PipelineAck.getECNFromHeader(ack.getHeaderFlag(i)) ==
                 PipelineAck.ECN.CONGESTED) {
               congestedNodesFromAck.add(targets[i]);
+            }
+            if (PipelineAck.getSLOWFromHeader(ack.getHeaderFlag(i)) ==
+                PipelineAck.SLOW.SLOW) {
+              slownodesFromAck.add(targets[i]);
             }
             // Restart will not be treated differently unless it is
             // the local node or the only one in the pipeline.
@@ -1175,6 +1199,16 @@ class DataStreamer extends Daemon {
               lastCongestionBackoffTime = 0;
             }
           }
+
+          if (slownodesFromAck.isEmpty()) {
+            if (!slowNodeMap.isEmpty()) {
+              slowNodeMap.clear();
+            }
+          } else {
+            markSlowNode(slownodesFromAck);
+            LOG.debug("SlowNodeMap content: {}.", slowNodeMap);
+          }
+
 
           assert seqno != PipelineAck.UNKOWN_SEQNO :
               "Ack for unknown seqno should be a failed ack: " + ack;
@@ -1242,9 +1276,50 @@ class DataStreamer extends Daemon {
       }
     }
 
+    void markSlowNode(List<DatanodeInfo> slownodesFromAck) throws IOException {
+      Set<DatanodeInfo> discontinuousNodes = new HashSet<>(slowNodeMap.keySet());
+      for (DatanodeInfo slowNode : slownodesFromAck) {
+        if (!slowNodeMap.containsKey(slowNode)) {
+          slowNodeMap.put(slowNode, 1);
+        } else {
+          int oldCount = slowNodeMap.get(slowNode);
+          slowNodeMap.put(slowNode, ++oldCount);
+        }
+        discontinuousNodes.remove(slowNode);
+      }
+      for (DatanodeInfo discontinuousNode : discontinuousNodes) {
+        slowNodeMap.remove(discontinuousNode);
+      }
+
+      if (!slowNodeMap.isEmpty()) {
+        for (Map.Entry<DatanodeInfo, Integer> entry : slowNodeMap.entrySet()) {
+          if (entry.getValue() >= markSlowNodeAsBadNodeThreshold) {
+            DatanodeInfo slowNode = entry.getKey();
+            int index = getDatanodeIndex(slowNode);
+            if (index >= 0) {
+              errorState.setBadNodeIndex(index);
+              throw new IOException("Receive reply from slowNode " + slowNode +
+                  " for continuous " + markSlowNodeAsBadNodeThreshold +
+                  " times, treating it as badNode");
+            }
+            slowNodeMap.remove(entry.getKey());
+          }
+        }
+      }
+    }
+
     void close() {
       responderClosed = true;
       this.interrupt();
+    }
+
+    int getDatanodeIndex(DatanodeInfo datanodeInfo) {
+      for (int i = 0; i < targets.length; i++) {
+        if (targets[i].equals(datanodeInfo)) {
+          return i;
+        }
+      }
+      return -1;
     }
   }
 
@@ -1374,18 +1449,10 @@ class DataStreamer extends Daemon {
        * Case 2: Failure in Streaming
        * - Append/Create:
        *    + transfer RBW
-       *
-       * Case 3: Failure in Close
-       * - Append/Create:
-       *    + no transfer, let NameNode replicates the block.
        */
     if (!isAppend && lastAckedSeqno < 0
         && stage == BlockConstructionStage.PIPELINE_SETUP_CREATE) {
       //no data have been written
-      return;
-    } else if (stage == BlockConstructionStage.PIPELINE_CLOSE
-        || stage == BlockConstructionStage.PIPELINE_CLOSE_RECOVERY) {
-      //pipeline is closing
       return;
     }
 
@@ -1683,7 +1750,7 @@ class DataStreamer extends Daemon {
 
   DatanodeInfo[] getExcludedNodes() {
     return excludedNodes.getAllPresent(excludedNodes.asMap().keySet())
-            .keySet().toArray(new DatanodeInfo[0]);
+            .keySet().toArray(DatanodeInfo.EMPTY_ARRAY);
   }
 
   /**

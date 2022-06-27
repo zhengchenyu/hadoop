@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.sls.scheduler;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -54,11 +55,13 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.AbstractYarnSched
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplication;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicationAttempt;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fifo.FifoScheduler;
 import org.apache.hadoop.yarn.sls.conf.SLSConfiguration;
+import org.apache.hadoop.yarn.sls.utils.NodeUsageRanges;
 import org.apache.hadoop.yarn.sls.web.SLSWebApp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -157,6 +160,8 @@ public abstract class SchedulerMetrics {
     registerClusterResourceMetrics();
     registerContainerAppNumMetrics();
     registerSchedulerMetrics();
+    registerNodesUsageMetrics("memory");
+    registerNodesUsageMetrics("vcores");
 
     // .csv output
     initMetricsCSVOutput();
@@ -180,7 +185,7 @@ public abstract class SchedulerMetrics {
     // application running information
     jobRuntimeLogBW =
         new BufferedWriter(new OutputStreamWriter(new FileOutputStream(
-            metricsOutputDir + "/jobruntime.csv"), "UTF-8"));
+            metricsOutputDir + "/jobruntime.csv"), StandardCharsets.UTF_8));
     jobRuntimeLogBW.write("JobID,real_start_time,real_end_time," +
         "simulate_start_time,simulate_end_time" + EOL);
     jobRuntimeLogBW.flush();
@@ -312,7 +317,7 @@ public abstract class SchedulerMetrics {
         new Gauge<Long>() {
           @Override
           public Long getValue() {
-            if (scheduler.getRootQueueMetrics() == null) {
+            if (isMetricsAvailable()) {
               return 0L;
             } else {
               return scheduler.getRootQueueMetrics().getAllocatedMB();
@@ -324,7 +329,7 @@ public abstract class SchedulerMetrics {
         new Gauge<Integer>() {
           @Override
           public Integer getValue() {
-            if (scheduler.getRootQueueMetrics() == null) {
+            if (isMetricsAvailable()) {
               return 0;
             } else {
               return scheduler.getRootQueueMetrics().getAllocatedVirtualCores();
@@ -336,7 +341,7 @@ public abstract class SchedulerMetrics {
         new Gauge<Long>() {
           @Override
           public Long getValue() {
-            if (scheduler.getRootQueueMetrics() == null) {
+            if (isMetricsAvailable()) {
               return 0L;
             } else {
               return scheduler.getRootQueueMetrics().getAvailableMB();
@@ -348,7 +353,7 @@ public abstract class SchedulerMetrics {
         new Gauge<Integer>() {
           @Override
           public Integer getValue() {
-            if (scheduler.getRootQueueMetrics() == null) {
+            if (isMetricsAvailable()) {
               return 0;
             } else {
               return scheduler.getRootQueueMetrics().getAvailableVirtualCores();
@@ -356,6 +361,10 @@ public abstract class SchedulerMetrics {
           }
         }
     );
+  }
+
+  private boolean isMetricsAvailable() {
+    return scheduler.getRootQueueMetrics() == null;
   }
 
   private void registerContainerAppNumMetrics() {
@@ -463,6 +472,49 @@ public abstract class SchedulerMetrics {
     }
   }
 
+  private void registerNodesUsageMetrics(String resourceType) {
+    samplerLock.lock();
+    try {
+      for (NodeUsageRanges.Range range : NodeUsageRanges.getRanges()) {
+        String metricName = "nodes." + resourceType + "." + range.getKeyword();
+        metrics.register(metricName,
+            new Gauge<Integer>() {
+              @Override
+              public Integer getValue() {
+                if (!(scheduler instanceof AbstractYarnScheduler)) {
+                  return 0;
+                } else {
+                  int count = 0;
+                  AbstractYarnScheduler sch = (AbstractYarnScheduler) scheduler;
+                  for (Object node : sch.getNodeTracker().getAllNodes()) {
+                    SchedulerNode sNode = (SchedulerNode) node;
+                    long allocated = 0, total = 0;
+                    if (resourceType.equals("memory")) {
+                      allocated = sNode.getAllocatedResource().getMemorySize();
+                      total = sNode.getTotalResource().getMemorySize();
+                    } else if (resourceType.equals("vcores")) {
+                      allocated =
+                          sNode.getAllocatedResource().getVirtualCores();
+                      total =
+                          sNode.getTotalResource().getVirtualCores();
+                    }
+                    float usedPct = allocated * 100f / total;
+                    if (range.getLowerLimit() <= usedPct
+                        && usedPct <= range.getUpperLimit()) {
+                      count++;
+                    }
+                  }
+                  return count;
+                }
+              }
+            }
+        );
+      }
+    } finally {
+      samplerLock.unlock();
+    }
+  }
+
   private void initMetricsCSVOutput() {
     int timeIntervalMS = conf.getInt(
         SLSConfiguration.METRICS_RECORD_INTERVAL_MS,
@@ -509,7 +561,7 @@ public abstract class SchedulerMetrics {
       try {
         metricsLogBW =
             new BufferedWriter(new OutputStreamWriter(new FileOutputStream(
-                metricsOutputDir + "/realtimetrack.json"), "UTF-8"));
+                metricsOutputDir + "/realtimetrack.json"), StandardCharsets.UTF_8));
         metricsLogBW.write("[");
       } catch (IOException e) {
         LOG.info(e.getMessage());
@@ -666,11 +718,10 @@ public abstract class SchedulerMetrics {
       long traceEndTimeMS, long simulateStartTimeMS, long simulateEndTimeMS) {
     try {
       // write job runtime information
-      StringBuilder sb = new StringBuilder();
-      sb.append(appId).append(",").append(traceStartTimeMS).append(",")
-          .append(traceEndTimeMS).append(",").append(simulateStartTimeMS)
-          .append(",").append(simulateEndTimeMS);
-      jobRuntimeLogBW.write(sb.toString() + EOL);
+      String runtimeInfo = appId + "," + traceStartTimeMS + "," +
+          traceEndTimeMS + "," + simulateStartTimeMS +
+          "," + simulateEndTimeMS;
+      jobRuntimeLogBW.write(runtimeInfo + EOL);
       jobRuntimeLogBW.flush();
     } catch (IOException e) {
       LOG.info(e.getMessage());

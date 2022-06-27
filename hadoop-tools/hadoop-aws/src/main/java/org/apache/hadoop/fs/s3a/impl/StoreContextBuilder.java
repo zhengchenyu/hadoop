@@ -25,9 +25,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.Invoker;
 import org.apache.hadoop.fs.s3a.S3AInputPolicy;
 import org.apache.hadoop.fs.s3a.S3AStorageStatistics;
+import org.apache.hadoop.fs.s3a.audit.AuditSpanS3A;
 import org.apache.hadoop.fs.s3a.statistics.S3AStatisticsContext;
-import org.apache.hadoop.fs.s3a.s3guard.ITtlTimeProvider;
-import org.apache.hadoop.fs.s3a.s3guard.MetadataStore;
+import org.apache.hadoop.fs.store.audit.AuditSpanSource;
 import org.apache.hadoop.security.UserGroupInformation;
 
 /**
@@ -61,13 +61,13 @@ public class StoreContextBuilder {
 
   private boolean multiObjectDeleteEnabled = true;
 
-  private MetadataStore metadataStore;
-
   private boolean useListV1 = false;
 
   private ContextAccessors contextAccessors;
 
-  private ITtlTimeProvider timeProvider;
+  private AuditSpanSource<AuditSpanS3A> auditor;
+
+  private boolean isCSEEnabled;
 
   public StoreContextBuilder setFsURI(final URI fsURI) {
     this.fsURI = fsURI;
@@ -141,12 +141,6 @@ public class StoreContextBuilder {
     return this;
   }
 
-  public StoreContextBuilder setMetadataStore(
-      final MetadataStore store) {
-    this.metadataStore = store;
-    return this;
-  }
-
   public StoreContextBuilder setUseListV1(
       final boolean useV1) {
     this.useListV1 = useV1;
@@ -159,13 +153,28 @@ public class StoreContextBuilder {
     return this;
   }
 
-  public StoreContextBuilder setTimeProvider(
-      final ITtlTimeProvider provider) {
-    this.timeProvider = provider;
+  /**
+   * Set builder value.
+   * @param value new value
+   * @return the builder
+   */
+  public StoreContextBuilder setAuditor(
+      final AuditSpanSource<AuditSpanS3A> value) {
+    auditor = value;
     return this;
   }
 
-  @SuppressWarnings("deprecation")
+  /**
+   * set is client side encryption boolean value.
+   * @param value value indicating if client side encryption is enabled or not.
+   * @return builder instance.
+   */
+  public StoreContextBuilder setEnableCSE(
+      boolean value) {
+    isCSEEnabled = value;
+    return this;
+  }
+
   public StoreContext build() {
     return new StoreContext(fsURI,
         bucket,
@@ -180,9 +189,9 @@ public class StoreContextBuilder {
         inputPolicy,
         changeDetectionPolicy,
         multiObjectDeleteEnabled,
-        metadataStore,
         useListV1,
         contextAccessors,
-        timeProvider);
+        auditor,
+        isCSEEnabled);
   }
 }

@@ -38,6 +38,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -45,6 +46,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import static java.util.concurrent.TimeUnit.*;
 
@@ -444,6 +446,17 @@ public class TestConfiguration {
     assertTrue(mock.getInt("my.int", -1) == 42);
   }
 
+  /**
+   * Checks if variable substitution is accessible via a public API.
+   */
+  @Test
+  public void testCommonVariableSubstitution() {
+    conf.set("intvar", String.valueOf(42));
+    String intVar = conf.substituteCommonVariables("${intvar}");
+
+    assertEquals("42", intVar);
+  }
+
   @Test
   public void testEnvDefault() throws IOException {
     Configuration mock = Mockito.spy(conf);
@@ -480,6 +493,62 @@ public class TestConfiguration {
       System.out.println("p=" + p.name);
       String gotVal = mock.get(p.name);
       String gotRawVal = mock.getRaw(p.name);
+      assertEq(p.val, gotRawVal);
+      assertEq(p.expectEval, gotVal);
+    }
+  }
+
+  /**
+   * Verify that when a configuration is restricted, environment
+   * variables and system properties will be unresolved.
+   * The fallback patterns for the variables are still parsed.
+   */
+  @Test
+  public void testRestrictedEnv() throws IOException {
+    // this test relies on env.PATH being set on all platforms a
+    // test run will take place on, and the java.version sysprop
+    // set in all JVMs.
+    // Restricted configurations will not get access to these values, so
+    // will either be unresolved or, for env vars with fallbacks: the fallback
+    // values.
+
+    conf.setRestrictSystemProperties(true);
+
+    out = new BufferedWriter(new FileWriter(CONFIG));
+    startConfig();
+    // a simple property to reference
+    declareProperty("d", "D", "D");
+
+    // system property evaluation stops working completely
+    declareProperty("system1", "${java.version}", "${java.version}");
+
+    // the env variable does not resolve
+    declareProperty("secret1", "${env.PATH}", "${env.PATH}");
+
+    // but all the fallback options do work
+    declareProperty("secret2", "${env.PATH-a}", "a");
+    declareProperty("secret3", "${env.PATH:-b}", "b");
+    declareProperty("secret4", "${env.PATH:-}", "");
+    declareProperty("secret5", "${env.PATH-}", "");
+    // special case
+    declareProperty("secret6", "${env.PATH:}", "${env.PATH:}");
+    // safety check
+    declareProperty("secret7", "${env.PATH:--}", "-");
+
+    // recursive eval of the fallback
+    declareProperty("secret8", "${env.PATH:-${d}}", "D");
+
+    // if the fallback doesn't resolve, the result is the whole variable raw.
+    declareProperty("secret9", "${env.PATH:-$d}}", "${env.PATH:-$d}}");
+
+    endConfig();
+    Path fileResource = new Path(CONFIG);
+    conf.addResource(fileResource);
+
+    for (Prop p : props) {
+      System.out.println("p=" + p.name);
+      String gotVal = conf.get(p.name);
+      String gotRawVal = conf.getRaw(p.name);
       assertEq(p.val, gotRawVal);
       assertEq(p.expectEval, gotVal);
     }
@@ -2619,5 +2688,32 @@ public class TestConfiguration {
     assertEquals(">cdata\nmultiline<>", conf.get("cdata-multiline"));
     assertEquals("  prefix >cdata\nsuffix  ", conf.get("cdata-whitespace"));
     return conf;
+  }
+
+  @Test
+  public void testConcurrentModificationDuringIteration() throws InterruptedException {
+    Configuration configuration = new Configuration();
+    new Thread(() -> {
+      while (true) {
+        configuration.set(String.valueOf(Math.random()), String.valueOf(Math.random()));
+      }
+    }).start();
+
+    AtomicBoolean exceptionOccurred = new AtomicBoolean(false);
+
+    new Thread(() -> {
+      while (true) {
+        try {
+          configuration.iterator();
+        } catch (final ConcurrentModificationException e) {
+          exceptionOccurred.set(true);
+          break;
+        }
+      }
+    }).start();
+
+    Thread.sleep(1000); //give enough time for threads to run
+
+    assertFalse("ConcurrentModificationException occurred", exceptionOccurred.get());
   }
 }
