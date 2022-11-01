@@ -94,7 +94,8 @@ message RpcRequestHeaderProto { // the header for the RpcRequest
   // Alignment context info for use with routers.
   // The client should not interpret these bytes, but only forward bytes
   // received from RpcResponseHeaderProto.routerFederatedState.
-  optional bytes routerFederatedState = 9;
+//  optional bytes routerFederatedState = 9;
+  map<string, int64> namespaceStateIds = 9;
 }
 
 
@@ -164,7 +165,7 @@ message RpcResponseHeaderProto {
   // Alignment context info for use with routers.
   // The client should not interpret these bytes, but only
   // forward them to the router using RpcRequestHeaderProto.routerFederatedState.
-  optional bytes routerFederatedState = 10;
+  map<string, int64> routerFederatedState = 10;
 }
 
 message RpcSaslProto {

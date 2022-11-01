@@ -19,9 +19,13 @@
 package org.apache.hadoop.hdfs.server.federation.router;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.LongAccumulator;
 import org.apache.hadoop.ipc.AlignmentContext;
+import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos;
+import org.apache.hadoop.thirdparty.protobuf.ByteString;
 
 
 /**
@@ -41,10 +45,12 @@ import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos;
 public class PoolAlignmentContext implements AlignmentContext {
   private LongAccumulator sharedGlobalStateId;
   private LongAccumulator poolLocalStateId;
+  private String nsId;
 
   PoolAlignmentContext(RouterStateIdContext routerStateIdContext, String namespaceId) {
     sharedGlobalStateId = routerStateIdContext.getNamespaceStateId(namespaceId);
     poolLocalStateId = new LongAccumulator(Math::max, Long.MIN_VALUE);
+    nsId = namespaceId;
   }
 
   /**
@@ -73,6 +79,8 @@ public class PoolAlignmentContext implements AlignmentContext {
   public void updateRequestState(RpcHeaderProtos.RpcRequestHeaderProto.Builder header) {
     long maxStateId = Long.max(poolLocalStateId.get(), sharedGlobalStateId.get());
     header.setStateId(maxStateId);
+    // Record used nameservice
+    RouterStateIdContext.updateClientStateIdToCurrentCall(nsId, maxStateId);
   }
 
   /**

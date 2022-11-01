@@ -351,7 +351,7 @@ public class TestRouterMountTable {
         Collections.singletonMap("ns0", "/testA/testB/testC/testD"));
     assertTrue(addMountTable(addEntry));
     RouterClientProtocol clientProtocol = new RouterClientProtocol(
-        nnFs0.getConf(), routerContext.getRouter().getRpcServer());
+        nnFs0.getConf(), routerContext.getRouter().getRpcServer(), null);
     String src = "/";
     String child = "testA";
     Path childPath = new Path(src, child);

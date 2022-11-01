@@ -939,7 +939,7 @@ public abstract class Server {
     private boolean isCallCoordinated;
     // Serialized RouterFederatedStateProto message to
     // store last seen states for multiple namespaces.
-    private ByteString federatedNamespaceState;
+    private Map<String, Long> federatedNamespaceState = new HashMap<>();
 
     Call() {
       this(RpcConstants.INVALID_CALL_ID, RpcConstants.INVALID_RETRY_COUNT,
@@ -997,11 +997,13 @@ public abstract class Server {
       return processingDetails;
     }
 
-    public void setFederatedNamespaceState(ByteString federatedNamespaceState) {
-      this.federatedNamespaceState = federatedNamespaceState;
+    public void setFederatedNamespaceState(Map<String, Long> federatedNamespaceState) {
+      if (federatedNamespaceState != null) {
+        this.federatedNamespaceState.putAll(federatedNamespaceState);
+      }
     }
 
-    public ByteString getFederatedNamespaceState() {
+    public Map<String, Long> getFederatedNamespaceState() {
       return this.federatedNamespaceState;
     }
 
@@ -2879,8 +2881,8 @@ public abstract class Server {
             stateId = alignmentContext.receiveRequestState(
                 header, getMaxIdleTime());
             call.setClientStateId(stateId);
-            if (header.hasRouterFederatedState()) {
-              call.setFederatedNamespaceState(header.getRouterFederatedState());
+            if (header.getNamespaceStateIdsCount() > 0) {
+              call.setFederatedNamespaceState(header.getNamespaceStateIdsMap());
             }
           }
         } catch (IOException ioe) {
@@ -3419,6 +3421,7 @@ public abstract class Server {
     headerBuilder.setStatus(status);
     headerBuilder.setServerIpcVersionNum(CURRENT_VERSION);
     if (alignmentContext != null) {
+      headerBuilder.putAllRouterFederatedState(call.getFederatedNamespaceState());
       alignmentContext.updateResponseState(headerBuilder);
     }
 

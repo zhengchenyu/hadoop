@@ -25,8 +25,8 @@ import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcRequestHeaderProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.atomic.LongAccumulator;
-import org.apache.hadoop.thirdparty.protobuf.ByteString;
 
 /**
  * Global State Id context for the client.
@@ -39,7 +39,7 @@ import org.apache.hadoop.thirdparty.protobuf.ByteString;
 public class ClientGSIContext implements AlignmentContext {
 
   private final LongAccumulator lastSeenStateId;
-  private ByteString routerFederatedState;
+  private Map<String, Long> routerFederatedState;
 
   public ClientGSIContext() {
     this(new LongAccumulator(Math::max, Long.MIN_VALUE));
@@ -76,8 +76,8 @@ public class ClientGSIContext implements AlignmentContext {
    */
   @Override
   public synchronized void receiveResponseState(RpcResponseHeaderProto header) {
-    if (header.hasRouterFederatedState()) {
-      routerFederatedState = header.getRouterFederatedState();
+    if (header.getRouterFederatedStateCount() > 0) {
+      routerFederatedState = header.getRouterFederatedStateMap();
     } else {
       lastSeenStateId.accumulate(header.getStateId());
     }
@@ -92,7 +92,7 @@ public class ClientGSIContext implements AlignmentContext {
       header.setStateId(lastSeenStateId.get());
     }
     if (routerFederatedState != null) {
-      header.setRouterFederatedState(routerFederatedState);
+      header.putAllNamespaceStateIds(routerFederatedState);
     }
   }
 

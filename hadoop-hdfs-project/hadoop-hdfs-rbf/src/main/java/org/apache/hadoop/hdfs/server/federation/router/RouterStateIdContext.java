@@ -80,13 +80,9 @@ class RouterStateIdContext implements AlignmentContext {
    * Adds the {@link #namespaceIdMap} to the response header that will be sent to a client.
    */
   public void setResponseHeaderState(RpcResponseHeaderProto.Builder headerBuilder) {
-    if (namespaceIdMap.isEmpty()) {
-      return;
-    }
-    HdfsServerFederationProtos.RouterFederatedStateProto.Builder federatedStateBuilder =
-        HdfsServerFederationProtos.RouterFederatedStateProto.newBuilder();
-    namespaceIdMap.forEach((k, v) -> federatedStateBuilder.putNamespaceStateIds(k, v.get()));
-    headerBuilder.setRouterFederatedState(federatedStateBuilder.build().toByteString());
+    headerBuilder.getRouterFederatedStateMap().forEach(
+        (k, v) -> headerBuilder.getRouterFederatedStateMap()
+            .put(k, Long.max(v, getNamespaceStateId(k).get())));
   }
 
   public LongAccumulator getNamespaceStateId(String nsId) {
@@ -118,13 +114,18 @@ class RouterStateIdContext implements AlignmentContext {
     Long clientStateID = Long.MIN_VALUE;
     Server.Call call = Server.getCurCall().get();
     if (call != null) {
-      ByteString callFederatedNamespaceState = call.getFederatedNamespaceState();
-      if (callFederatedNamespaceState != null) {
-        Map<String, Long> clientFederatedStateIds = getRouterFederatedStateMap(callFederatedNamespaceState);
-        clientStateID = clientFederatedStateIds.getOrDefault(nsId, Long.MIN_VALUE);
-      }
+      Map<String, Long> clientFederatedStateIds = call.getFederatedNamespaceState();
+      clientStateID = clientFederatedStateIds.getOrDefault(nsId, Long.MIN_VALUE);
     }
     return clientStateID;
+  }
+
+  public static void updateClientStateIdToCurrentCall(String nsId, long stateId) {
+    Server.Call call = Server.getCurCall().get();
+    if (call != null) {
+      Map<String, Long> clientFederatedStateIds = call.getFederatedNamespaceState();
+      clientFederatedStateIds.put(nsId, stateId);
+    }
   }
 
   @Override

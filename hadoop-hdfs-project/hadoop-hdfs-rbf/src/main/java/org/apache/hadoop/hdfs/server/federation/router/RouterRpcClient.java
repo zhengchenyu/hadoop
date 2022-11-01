@@ -64,6 +64,7 @@ import java.util.regex.Pattern;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.NameNodeProxiesClient.ProxyAndInfo;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.SnapshotException;
 import org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessPolicyController;
@@ -147,6 +148,16 @@ public class RouterRpcClient {
   private Map<String, LongAdder> acceptedPermitsPerNs = new ConcurrentHashMap<>();
 
   private final boolean enableProxyUser;
+
+  private static final Method MSYNC_METHOD;
+
+  static {
+    try {
+      MSYNC_METHOD = ClientProtocol.class.getDeclaredMethod("msync");
+    } catch (NoSuchMethodException e) {
+      throw new RuntimeException("Failed to create msync method instance.", e);
+    }
+  }
 
   /**
    * Create a router RPC client to manage remote procedure calls to NNs.
@@ -875,7 +886,7 @@ public class RouterRpcClient {
     acquirePermit(nsId, ugi, method, controller);
     try {
       boolean isObserverRead = isObserverReadEligible(nsId, method.getMethod());
-      List<? extends FederationNamenodeContext> nns = getOrderedNamenodes(nsId, isObserverRead);
+      List<? extends FederationNamenodeContext> nns = getOrderedNamenodes(ugi, nsId, isObserverRead);
       RemoteLocationContext loc = new RemoteLocation(nsId, "/", "/");
       Class<?> proto = method.getProtocol();
       Method m = method.getMethod();
@@ -1044,7 +1055,7 @@ public class RouterRpcClient {
       acquirePermit(ns, ugi, remoteMethod, controller);
       boolean isObserverRead = isObserverReadEligible(ns, m);
       List<? extends FederationNamenodeContext> namenodes =
-          getOrderedNamenodes(ns, isObserverRead);
+          getOrderedNamenodes(ugi, ns, isObserverRead);
       try {
         Class<?> proto = remoteMethod.getProtocol();
         Object[] params = remoteMethod.getParams(loc);
@@ -1407,7 +1418,7 @@ public class RouterRpcClient {
       acquirePermit(ns, ugi, method, controller);
       boolean isObserverRead = isObserverReadEligible(ns, m);
       final List<? extends FederationNamenodeContext> namenodes =
-          getOrderedNamenodes(ns, isObserverRead);
+          getOrderedNamenodes(ugi, ns, isObserverRead);
       try {
         Class<?> proto = method.getProtocol();
         Object[] paramList = method.getParams(location);
@@ -1432,7 +1443,7 @@ public class RouterRpcClient {
       String nsId = location.getNameserviceId();
       boolean isObserverRead = isObserverReadEligible(nsId, m);
       final List<? extends FederationNamenodeContext> namenodes =
-          getOrderedNamenodes(nsId, isObserverRead);
+          getOrderedNamenodes(ugi, nsId, isObserverRead);
       final Class<?> proto = method.getProtocol();
       final Object[] paramList = method.getParams(location);
       if (standby) {
@@ -1698,8 +1709,8 @@ public class RouterRpcClient {
    * @return A prioritized list of NNs to use for communication.
    * @throws IOException If a NN cannot be located for the nameservice ID.
    */
-  private List<? extends FederationNamenodeContext> getOrderedNamenodes(String nsId,
-      boolean isObserverRead) throws IOException {
+  private List<? extends FederationNamenodeContext> getOrderedNamenodes(UserGroupInformation ugi,
+      String nsId, boolean isObserverRead) throws IOException {
     final List<? extends FederationNamenodeContext> namenodes;
 
     if (RouterStateIdContext.getClientStateIdFromCurrentCall(nsId) > Long.MIN_VALUE) {
@@ -1711,6 +1722,12 @@ public class RouterRpcClient {
     if (namenodes == null || namenodes.isEmpty()) {
       throw new IOException("Cannot locate a registered namenode for " + nsId +
           " from " + router.getRouterId());
+    }
+
+    // check whether it is necessary to mysnc
+    long stateId = RouterStateIdContext.getClientStateIdFromCurrentCall(nsId);
+    if (stateId == Long.MIN_VALUE) {
+      invokeMethod(ugi, namenodes, isObserverRead, ClientProtocol.class, MSYNC_METHOD, new Object[0]);
     }
     return namenodes;
   }

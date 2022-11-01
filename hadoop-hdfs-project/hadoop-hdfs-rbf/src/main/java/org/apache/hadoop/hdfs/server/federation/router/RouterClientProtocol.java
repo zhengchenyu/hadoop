@@ -90,6 +90,7 @@ import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.io.EnumSetWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.ConnectTimeoutException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
@@ -115,6 +116,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -1916,12 +1918,67 @@ public class RouterClientProtocol implements ClientProtocol {
     return null;
   }
 
+  private final static class LongHolder {
+    private AtomicLong value;
+
+    LongHolder(long value) {
+      this.value = new AtomicLong(value);
+    }
+
+    public void setValue(long value) {
+      long expect;
+      do {
+        expect =  getValue();
+      } while (expect < value && !this.value.compareAndSet(expect, value));
+    }
+
+    public long getValue() {
+      return value.get();
+    }
+  }
+
+  private Map<String, LongHolder> lastMsyncTimes = new HashMap<>();
+
+  private List<FederationNamespaceInfo> getNSsForMsync() throws IOException {
+    List<FederationNamespaceInfo> result = new ArrayList<>();
+    Server.Call call = Server.getCurCall().get();
+    if (call != null) {
+      long callStartTime = call.getTimestampNanos() / 1000000L;
+      Map<String, FederationNamespaceInfo> allAvailableNamespaces = getAvailableNamespaces();
+      for (String namespace : call.getFederatedNamespaceState().keySet()) {
+        if (allAvailableNamespaces.containsKey(namespace)) {
+          LongHolder latestMsyncTime = lastMsyncTimes.get(namespace);
+          if (latestMsyncTime == null) {
+            // initialize
+            synchronized (lastMsyncTimes) {
+              latestMsyncTime = lastMsyncTimes.get(namespace);
+              if(latestMsyncTime == null) {
+                latestMsyncTime = new LongHolder(0L);
+                lastMsyncTimes.put(namespace, latestMsyncTime);
+              }
+            }
+          }
+          if (callStartTime - latestMsyncTime.getValue() > 0) {
+            long requestTime = Time.monotonicNow();
+            result.add(allAvailableNamespaces.get(namespace));
+            latestMsyncTime.setValue(requestTime);
+          }
+        }
+      }
+    }
+    return result;
+  }
+
   @Override
   public void msync() throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.READ, true);
-    Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
+    List<FederationNamespaceInfo> nss = getNSsForMsync();
     RemoteMethod method = new RemoteMethod("msync");
-    rpcClient.invokeConcurrent(nss, method);
+    if (nss.size() == 1) {
+      rpcClient.invokeSingle(nss.get(0).getNameserviceId(), method);
+    } else if (nss.size() > 1) {
+      rpcClient.invokeConcurrent(nss, method);
+    }
   }
 
   @Override
