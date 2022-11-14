@@ -61,6 +61,8 @@ public class TestObserverWithRouter {
     if (confOverrides != null) {
       conf.addResource(confOverrides);
     }
+    int max = conf.getInt(RBFConfigKeys.DFS_ROUTER_OBSERVER_FEDERATED_STATE_PROPAGATION_MAXSIZE, 1);
+    conf.setInt(RBFConfigKeys.DFS_ROUTER_OBSERVER_FEDERATED_STATE_PROPAGATION_MAXSIZE, max);
     cluster = new MiniRouterDFSCluster(true, 2, numberOfNamenode);
     cluster.addNamenodeOverrides(conf);
     // Start NNs and DNs and wait until ready
