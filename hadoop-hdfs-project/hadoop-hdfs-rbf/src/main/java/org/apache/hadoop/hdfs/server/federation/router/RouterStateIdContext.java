@@ -19,9 +19,11 @@
 package org.apache.hadoop.hdfs.server.federation.router;
 
 import java.lang.reflect.Method;
+import java.util.Collections;
 import java.util.HashSet;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAccumulator;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -106,6 +108,14 @@ class RouterStateIdContext implements AlignmentContext {
       clientStateID = clientFederatedStateIds.getOrDefault(nsId, Long.MIN_VALUE);
     }
     return clientStateID;
+  }
+
+  public static Set<String> getNSsFromCurrentCall() {
+    Server.Call call = Server.getCurCall().get();
+    if (call != null) {
+      return call.getFederatedNamespaceState().keySet();
+    }
+    return Collections.emptySet();
   }
 
   public static void updateClientStateIdToCurrentCall(String nsId, long stateId) {
