@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.federation.router;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_STATE_CONTEXT_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.NAMENODES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
@@ -34,6 +35,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster;
 import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.RouterContext;
 import org.apache.hadoop.hdfs.server.federation.RouterConfigBuilder;
@@ -81,6 +83,7 @@ public class TestObserverWithRouter {
   public void startUpCluster(int numberOfObserver, Configuration confOverrides) throws Exception {
     int numberOfNamenode = 2 + numberOfObserver;
     Configuration conf = new Configuration(false);
+    conf.setBoolean(DFS_NAMENODE_STATE_CONTEXT_ENABLED_KEY, true);
     conf.setBoolean(RBFConfigKeys.DFS_ROUTER_OBSERVER_READ_DEFAULT_KEY, true);
     conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY, true);
     conf.set(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, "0ms");
@@ -165,6 +168,52 @@ public class TestObserverWithRouter {
         .getRPCMetrics().getObserverProxyOps();
     // getBlockLocations should be sent to observer
     assertEquals("One call should be sent to observer", 1, rpcCountForObserver);
+  }
+
+  @Test
+  public void testObserverReadMultiNameservice() throws Exception {
+    Configuration confOverrides = new Configuration(false);
+    confOverrides.setInt(RBFConfigKeys.DFS_ROUTER_OBSERVER_FEDERATED_STATE_PROPAGATION_MAXSIZE, 1);
+    confOverrides.setBoolean("fs.hdfs.impl.disable.cache", true);
+    startUpCluster(1, confOverrides);
+    RouterContext routerContext = cluster.getRandomRouter();
+    List<? extends FederationNamenodeContext> namenodes = routerContext
+        .getRouter().getNamenodeResolver()
+        .getNamenodesForNameserviceId(cluster.getNameservices().get(0), true);
+    assertEquals("First namenode should be observer", namenodes.get(0).getState(),
+        FederationNamenodeServiceState.OBSERVER);
+
+    // 1 Create or open file in ns0
+    FileSystem fs0 = DistributedFileSystem.get(routerContext.getConf());
+    Path path0 = new Path("/ns0/testFile");
+    // Send Create call to active
+    fs0.create(path0).close();
+
+    // Send read request to observer
+    fs0.open(path0).close();
+
+    // 2 Create or open file in ns1
+    FileSystem fs1 = DistributedFileSystem.get(routerContext.getConf());
+
+    Path path1 = new Path("/ns1/testFile");
+    // Send Create call to active
+    fs1.create(path1).close();
+
+    // Send read request to observer
+    fs1.open(path1).close();
+
+    long rpcCountForActive = routerContext.getRouter().getRpcServer()
+        .getRPCMetrics().getActiveProxyOps();
+    // Create and complete calls should be sent to active
+    assertEquals("Two calls should be sent to active", 4, rpcCountForActive);
+
+    long rpcCountForObserver = routerContext.getRouter().getRpcServer()
+        .getRPCMetrics().getObserverProxyOps();
+    // getBlockLocations should be sent to observer
+    assertEquals("One call should be sent to observer", 2, rpcCountForObserver);
+
+    fs0.close();
+    fs1.close();
   }
 
   @Test
