@@ -22,10 +22,12 @@ set (LIBHDFS_TESTS_DIR ../../libhdfs-tests)
 set (LIBHDFSPP_SRC_DIR ..)
 set (LIBHDFSPP_LIB_DIR ${LIBHDFSPP_SRC_DIR}/lib)
 set (LIBHDFSPP_BINDING_C ${LIBHDFSPP_LIB_DIR}/bindings/c)
-set (PROTOBUF_LIBRARY /opt/protobuf/lib)
-set (PROTOBUF_LIBRARIES /opt/protobuf/lib)
-set (PROTOBUF_INCLUDE_DIR /opt/protobuf/include)
-set (PROTOBUF_INCLUDE_DIRS /opt/protobuf/include)
+set(Protobuf_PREFIX_PATH
+    "/opt/protobuf/include"
+    "/opt/protobuf/lib"
+    "/opt/protobuf/bin"
+)
+list(APPEND CMAKE_PREFIX_PATH "${Protobuf_PREFIX_PATH}")
 
 if (NOT MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-field-initializers")
