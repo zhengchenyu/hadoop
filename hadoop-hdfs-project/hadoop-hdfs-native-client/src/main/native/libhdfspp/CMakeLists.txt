@@ -43,6 +43,13 @@ SET(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};${CYRUS_SASL_DIR};${GSASL_DIR};$ENV{
 # Specify PROTOBUF_HOME so that find_package picks up the correct version
 SET(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};$ENV{PROTOBUF_HOME}")
 
+set(Protobuf_PREFIX_PATH
+    "/opt/protobuf/include"
+    "/opt/protobuf/lib"
+    "/opt/protobuf/bin"
+)
+list(APPEND CMAKE_PREFIX_PATH "${Protobuf_PREFIX_PATH}")
+
 find_package(Doxygen)
 find_package(OpenSSL REQUIRED)
 find_package(Protobuf REQUIRED)
