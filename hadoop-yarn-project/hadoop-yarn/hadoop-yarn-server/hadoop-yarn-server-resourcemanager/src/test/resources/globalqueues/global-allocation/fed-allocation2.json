@@ -1,0 +1,261 @@
+{
+  "name": "Federation allocation from 2 subclusters",
+  "subClusters": [
+    {
+      "queueName": "root",
+      "scope": {"id": "sc1"},
+      "totCap": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "guarCap": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "maxCap": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "usedCap": {
+        "memory": "50",
+        "vCores": "50"
+      },
+      "demandCap": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "testExpectedIdealAlloc": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "children": [
+        {
+          "queueName": "A",
+          "scope": {"id": "sc1"},
+          "guarCap": {
+            "memory": "50",
+            "vCores": "50"
+          },
+          "maxCap": {
+            "memory": "100",
+            "vCores": "100"
+          },
+          "usedCap": {
+            "memory": "50",
+            "vCores": "50"
+          },
+          "demandCap": {
+            "memory": "100",
+            "vCores": "100"
+          },
+          "testExpectedIdealAlloc": {
+            "memory": "100",
+            "vCores": "100"
+          },
+          "children": [
+            {
+              "queueName": "A1",
+              "scope": {"id": "sc1"},
+              "guarCap": {
+                "memory": "25",
+                "vCores": "25"
+              },
+              "maxCap": {
+                "memory": "100",
+                "vCores": "100"
+              },
+              "usedCap": {
+                "memory": "25",
+                "vCores": "25"
+              },
+              "demandCap": {
+                "memory": "0",
+                "vCores": "0"
+              },
+              "testExpectedIdealAlloc": {
+                "memory": "25",
+                "vCores": "25"
+              }
+            },
+            {
+              "queueName": "A2",
+              "scope": {"id": "sc1"},
+              "guarCap": {
+                "memory": "25",
+                "vCores": "25"
+              },
+              "maxCap": {
+                "memory": "100",
+                "vCores": "100"
+              },
+              "usedCap": {
+                "memory": "25",
+                "vCores": "25"
+              },
+              "demandCap": {
+                "memory": "100",
+                "vCores": "100"
+              },
+              "testExpectedIdealAlloc": {
+                "memory": "75",
+                "vCores": "75"
+              }
+            }
+          ]
+        },
+        {
+          "queueName": "B",
+          "scope": {"id": "sc1"},
+          "guarCap": {
+            "memory": "50",
+            "vCores": "50"
+          },
+          "maxCap": {
+            "memory": "100",
+            "vCores": "100"
+          },
+          "usedCap": {
+            "memory": "0",
+            "vCores": "0"
+          },
+          "demandCap": {
+            "memory": "0",
+            "vCores": "0"
+          },
+          "testExpectedIdealAlloc": {
+            "memory": "0",
+            "vCores": "0"
+          }
+        }
+      ]
+    },
+    {
+      "queueName": "root",
+      "scope": {"id": "sc2"},
+      "totCap": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "guarCap": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "maxCap": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "usedCap": {
+        "memory": "50",
+        "vCores": "50"
+      },
+      "demandCap": {
+        "memory": "70",
+        "vCores": "70"
+      },
+      "testExpectedIdealAlloc": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "children": [
+        {
+          "queueName": "A",
+          "scope": {"id": "sc2"},
+          "guarCap": {
+            "memory": "50",
+            "vCores": "50"
+          },
+          "maxCap": {
+            "memory": "100",
+            "vCores": "100"
+          },
+          "usedCap": {
+            "memory": "0",
+            "vCores": "0"
+          },
+          "demandCap": {
+            "memory": "0",
+            "vCores": "0"
+          },
+          "testExpectedIdealAlloc": {
+            "memory": "0",
+            "vCores": "0"
+          },
+          "children": [
+            {
+              "queueName": "A1",
+              "scope": {"id": "sc2"},
+              "guarCap": {
+                "memory": "25",
+                "vCores": "25"
+              },
+              "maxCap": {
+                "memory": "100",
+                "vCores": "100"
+              },
+              "usedCap": {
+                "memory": "0",
+                "vCores": "0"
+              },
+              "demandCap": {
+                "memory": "0",
+                "vCores": "0"
+              },
+              "testExpectedIdealAlloc": {
+                "memory": "0",
+                "vCores": "0"
+              }
+            },
+            {
+              "queueName": "A2",
+              "scope": {"id": "sc2"},
+              "guarCap": {
+                "memory": "25",
+                "vCores": "25"
+              },
+              "maxCap": {
+                "memory": "100",
+                "vCores": "100"
+              },
+              "usedCap": {
+                "memory": "0",
+                "vCores": "0"
+              },
+              "demandCap": {
+                "memory": "0",
+                "vCores": "0"
+              },
+              "testExpectedIdealAlloc": {
+                "memory": "0",
+                "vCores": "0"
+              }
+            }
+          ]
+        },
+        {
+          "queueName": "B",
+          "scope": {"id": "sc2"},
+          "guarCap": {
+            "memory": "50",
+            "vCores": "50"
+          },
+          "maxCap": {
+            "memory": "100",
+            "vCores": "100"
+          },
+          "usedCap": {
+            "memory": "0",
+            "vCores": "0"
+          },
+          "demandCap": {
+            "memory": "100",
+            "vCores": "100"
+          },
+          "testExpectedIdealAlloc": {
+            "memory": "100",
+            "vCores": "100"
+          }
+        }
+      ]
+    }
+  ]
+}

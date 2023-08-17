@@ -4245,6 +4245,9 @@ public class YarnConfiguration extends Configuration {
       "org.apache.hadoop.yarn.server.router.rmadmin."
           + "DefaultRMAdminRequestInterceptor";
 
+  public static final String FEDERATION_GLOBAL_QUEUES_HEURISTIC =
+      FEDERATION_PREFIX + "globalqueues-heuristics";
+
   /**
    * The number of retries for GetNewApplication and SubmitApplication in
    * {@code FederationClientInterceptor}.

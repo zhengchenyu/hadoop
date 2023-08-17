@@ -3768,6 +3768,16 @@
     <value>1s</value>
   </property>
 
+  <property>
+    <description>The heuristics used to pick "where" to
+      consume capacity during the calculation of global queues in federation. The default behavior
+      attempts, all else being equal to balance load across sub-clusters.
+    </description>
+    <name>yarn.federation.globalqueues-heuristics</name>
+    <value>org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues.LoadBalancingGlobalQueueComparator
+    </value>
+  </property>
+
   <!-- Other Configuration -->
 
   <property>
