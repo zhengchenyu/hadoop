@@ -1,0 +1,129 @@
+{
+  "name": "Corner case, B steals from A by jumping on hot cluster",
+  "subClusters": [
+    {
+      "queueName": "root",
+      "scope": {"id": "sc1"},
+      "totCap": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "testExpectedIdealAlloc": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "children": [
+        {
+          "queueName": "A",
+          "scope": {"id": "sc1"},
+          "guarCap": {
+            "memory": "35",
+            "vCores": "35"
+          },
+          "maxCap": {
+            "memory": "100",
+            "vCores": "100"
+          },
+          "usedCap": {
+            "memory": "10",
+            "vCores": "10"
+          },
+          "demandCap": {
+            "memory": "400",
+            "vCores": "400"
+          },
+          "testExpectedIdealAlloc": {
+            "memory": "100",
+            "vCores": "100"
+          }
+        },
+        {
+          "queueName": "B",
+          "scope": {"id": "sc1"},
+          "guarCap": {
+            "memory": "50",
+            "vCores": "50"
+          },
+          "maxCap": {
+            "memory": "100",
+            "vCores": "100"
+          },
+          "usedCap": {
+            "memory": "0",
+            "vCores": "0"
+          },
+          "demandCap": {
+            "memory": "500",
+            "vCores": "500"
+          },
+          "testExpectedIdealAlloc": {
+            "memory": "0",
+            "vCores": "0"
+          }
+        }
+      ]
+    },
+    {
+      "queueName": "root",
+      "scope": {"id": "sc2"},
+      "totCap": {
+        "memory": "50",
+        "vCores": "50"
+      },
+      "testExpectedIdealAlloc": {
+        "memory": "100",
+        "vCores": "100"
+      },
+      "children": [
+        {
+          "queueName": "A",
+          "scope": {"id": "sc2"},
+          "guarCap": {
+            "memory": "40",
+            "vCores": "40"
+          },
+          "maxCap": {
+            "memory": "50",
+            "vCores": "50"
+          },
+          "usedCap": {
+            "memory": "0",
+            "vCores": "0"
+          },
+          "demandCap": {
+            "memory": "10",
+            "vCores": "10"
+          },
+          "testExpectedIdealAlloc": {
+            "memory": "0",
+            "vCores": "0"
+          }
+        },
+        {
+          "queueName": "B",
+          "scope": {"id": "sc2"},
+          "guarCap": {
+            "memory": "10",
+            "vCores": "10"
+          },
+          "maxCap": {
+            "memory": "50",
+            "vCores": "50"
+          },
+          "usedCap": {
+            "memory": "0",
+            "vCores": "0"
+          },
+          "demandCap": {
+            "memory": "20",
+            "vCores": "20"
+          },
+          "testExpectedIdealAlloc": {
+            "memory": "100",
+            "vCores": "100"
+          }
+        }
+      ]
+    }
+  ]
+}

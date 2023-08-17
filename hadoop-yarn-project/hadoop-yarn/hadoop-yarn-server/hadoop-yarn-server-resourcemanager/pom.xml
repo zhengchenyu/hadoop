@@ -334,6 +334,10 @@
          <groupId>com.fasterxml.jackson.dataformat</groupId>
          <artifactId>jackson-dataformat-yaml</artifactId>
      </dependency>
+     <dependency>
+         <groupId>org.ojalgo</groupId>
+         <artifactId>ojalgo</artifactId>
+     </dependency>
   </dependencies>
 
   <build>
