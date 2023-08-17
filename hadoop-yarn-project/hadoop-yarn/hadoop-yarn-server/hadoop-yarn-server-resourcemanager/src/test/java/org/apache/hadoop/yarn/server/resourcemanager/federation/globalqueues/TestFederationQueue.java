@@ -15,9 +15,9 @@
  * the License.
  */
 
-package org.apache.hadoop.yarn.server.globalpolicygenerator.globalqueues;
+package org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues;
 
-import static org.apache.hadoop.yarn.server.globalpolicygenerator.globalqueues.GlobalQueueTestUtil.*;
+import static org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues.GlobalQueueTestUtil.*;
 
 import java.util.ArrayList;
 import java.util.List;

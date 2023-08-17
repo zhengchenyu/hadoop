@@ -37,35 +37,35 @@ public class GlobalQueuesConversionUtils {
    *         queue hierarchy
    */
   public static GlobalFederationTempQueuePerPartition getAsTempQueuePerPartition(
-      ResourceCalculator rc, FedQueue fRoot) {
+      ResourceCalculator rc, FederationQueue fRoot) {
 
-    Resource totCap = fRoot.getTotCap().getResource();
-    Resource guarCap = fRoot.getGuarCap().getResource();
-    Resource maxCap = fRoot.getMaxCap().getResource();
-    Resource demandCap = fRoot.getDemandCap().getResource();
-    Resource usedCap = fRoot.getUsedCap().getResource();
+    Resource totCap = fRoot.getTotCap();
+    Resource guarCap = fRoot.getGuarCap();
+    Resource maxCap = fRoot.getMaxCap();
+    Resource demandCap = fRoot.getDemandCap();
+    Resource usedCap = fRoot.getUsedCap();
 
-    SubClusterId scope = fRoot.getScope();
+    SubClusterId scope = fRoot.getSubClusterId();
 
     float absCapacity = Resources.divide(rc, totCap, guarCap, totCap);
     float absmaxCapacity = Resources.divide(rc, totCap, maxCap, totCap);
 
     Assert.check(absCapacity >= 0 && absCapacity <= 1.0,
-        "Queue " + fRoot.getQueuename() + " at " + fRoot.getScope()
+        "Queue " + fRoot.getQueueName() + " at " + fRoot.getSubClusterId()
             + " has absCapacity:" + absCapacity + " (with guarCap: " + maxCap
             + " and totCap: " + totCap + ")");
     Assert.check(absmaxCapacity >= 0 && absmaxCapacity <= 1.0,
-        "Queue " + fRoot.getQueuename() + " at " + fRoot.getScope()
+        "Queue " + fRoot.getQueueName() + " at " + fRoot.getUsedCap()
             + " has absmaxCapacity:" + absmaxCapacity + " (with maxCap: "
             + maxCap + " and totCap: " + totCap + ")");
 
     GlobalFederationTempQueuePerPartition root =
-        new GlobalFederationTempQueuePerPartition(fRoot.getQueuename(), usedCap,
+        new GlobalFederationTempQueuePerPartition(fRoot.getQueueName(), usedCap,
             false, RMNodeLabelsManager.NO_LABEL, Resources.none(), absCapacity,
             absmaxCapacity, totCap, Resources.none(), null, Resources.none(),
             Resources.none(), scope, fRoot.getConf());
 
-    for (FedQueue c : fRoot.getChildren()) {
+    for (FederationQueue c : fRoot.getChildren().values()) {
       root.addChild(getAsTempQueuePerPartition(rc, c));
     }
 
@@ -89,32 +89,32 @@ public class GlobalQueuesConversionUtils {
         GlobalQueuesConversionUtils.getAsTempQueuePerPartition(rc, globalView.getGlobal());
     gRoot.setTotalPartitionUnassigned(
         Resources.subtract(gRoot.getGuaranteed(), gRoot.getUsed()));
-    for (FedQueue f : globalView.getSubClusters()) {
-      f.setTotalUnassigned(Resources.subtract(f.getTotCap().getResource(),
-          f.getUsedCap().getResource()));
+    for (FederationQueue f : globalView.getSubClusters()) {
+      f.setTotalUnassigned(Resources.subtract(f.getTotCap(),
+          f.getUsedCap()));
     }
     recursiveMerge(rc, gRoot, globalView.getSubClusters());
     return gRoot;
   }
 
   private static void recursiveMerge(ResourceCalculator rc,
-      GlobalFederationTempQueuePerPartition gRoot, List<FedQueue> lRoots) {
+      GlobalFederationTempQueuePerPartition gRoot, List<FederationQueue> lRoots) {
 
     Map<SubClusterId, GlobalFederationTempQueuePerPartition> lRootsAsTqpp =
         new TreeMap<>();
-    for (FedQueue localRoot : lRoots) {
+    for (FederationQueue localRoot : lRoots) {
       GlobalFederationTempQueuePerPartition tq =
           GlobalQueuesConversionUtils.getAsTempQueuePerPartition(rc, localRoot);
       tq.setTotalPartitionUnassigned(localRoot.getTotalUnassigned());
-      lRootsAsTqpp.put(localRoot.getScope(), tq);
+      lRootsAsTqpp.put(localRoot.getSubClusterId(), tq);
     }
     gRoot.addAllLocalSelf(lRootsAsTqpp);
     for (TempQueuePerPartition gChild : gRoot.getChildren()) {
       ((GlobalFederationTempQueuePerPartition) gChild)
           .setTotalPartitionUnassigned(gRoot.getTotalPartitionUnassigned());
-      List<FedQueue> temp = new ArrayList<>();
-      for (FedQueue lRoot : lRoots) {
-        FedQueue localChild = lRoot.getChildrenByName(gChild.getQueueName());
+      List<FederationQueue> temp = new ArrayList<>();
+      for (FederationQueue lRoot : lRoots) {
+        FederationQueue localChild = lRoot.getChildByName(gChild.getQueueName());
         // NOTE: the totalUnassigned is passed by reference so that local
         // updates affect
         // it globally.
@@ -125,32 +125,32 @@ public class GlobalQueuesConversionUtils {
     }
   }
 
-  private static String generateQueueName(FedQueue root, FedQueue child,
+  private static String generateQueueName(FederationQueue root, FederationQueue child,
       boolean forQueueList) {
-    String childName = child.getQueuename();
+    String childName = child.getQueueName();
 
     if (forQueueList) {
-      childName = (root.getQueuename().equals("root")) ? child.getQueuename()
-          : child.getQueuename().substring(root.getQueuename().length() + 1,
-              child.getQueuename().length());
+      childName = (root.getQueueName().equals("root")) ? child.getQueueName()
+          : child.getQueueName().substring(root.getQueueName().length() + 1,
+              child.getQueueName().length());
     }
     if (child.getChildren() == null || child.getChildren().size() == 0) {
-      childName += child.getQueuename().hashCode();
+      childName += child.getQueueName().hashCode();
     }
     return childName;
   }
 
   /**
-   * This method exports this FedQueue hierarchy as a
+   * This method exports this FederationQueue hierarchy as a
    * {@code CapacitySchedulerConfiguration}.
    *
    * @param baseConf a starting configuration
-   * @param root the FedQueue to export as CapacitySchedulerConfiguration
+   * @param root the FederationQueue to export as CapacitySchedulerConfiguration
    * @return the CapacitySchedulerConfiguration representing this queue
    *         hierarchy
    */
   public static CapacitySchedulerConfiguration exportAsCapacitySchedulerConfiguration(
-          Configuration baseConf, FedQueue root) {
+          Configuration baseConf, FederationQueue root) {
     CapacitySchedulerConfiguration conf =
             new CapacitySchedulerConfiguration(baseConf, false);
     recursiveExportToCSC(conf, root);
@@ -159,9 +159,9 @@ public class GlobalQueuesConversionUtils {
   }
 
   private static void recursiveExportToCSC(CapacitySchedulerConfiguration conf,
-                                           FedQueue root) {
+                                           FederationQueue root) {
 
-    String queueName = root.getQueuename();
+    String queueName = root.getQueueName();
 
     if (!queueName.equals("root")) {
       queueName = "root." + queueName;
@@ -170,17 +170,17 @@ public class GlobalQueuesConversionUtils {
     Resource sumOfChildren = Resource.newInstance(0, 0);
     List<String> childrenAsString = new ArrayList<>();
 
-    for (FedQueue child : root.getChildren()) {
+    for (FederationQueue child : root.getChildren().values()) {
 
       String childName = generateQueueName(root, child, true);
 
       childrenAsString.add(childName);
-      Resources.addTo(sumOfChildren, child.getGuarCap().getResource());
+      Resources.addTo(sumOfChildren, child.getGuarCap());
     }
     conf.setQueues(queueName,
             childrenAsString.toArray(new String[childrenAsString.size()]));
 
-    for (FedQueue child : root.getChildren()) {
+    for (FederationQueue child : root.getChildren().values()) {
 
       if (root.getGuarCap().getMemorySize() > 0) {
         double percentageCapacity = 100.0 * child.getGuarCap().getMemorySize()
@@ -195,13 +195,11 @@ public class GlobalQueuesConversionUtils {
     }
 
     // do recursion
-    for (FedQueue child : root.getChildren()) {
+    for (FederationQueue child : root.getChildren().values()) {
       recursiveExportToCSC(conf, child);
     }
 
   }
-
-
 
   /**
    * This method updates the global and local values of a ideal allocation of a
@@ -209,7 +207,7 @@ public class GlobalQueuesConversionUtils {
    * {@code GlobalFederationTempQueuePerPartition}.
    *
    * @param rootAsTQ a {@code GlobalFederationTempQueuePerPartition} that
-   *          contains the ideal allocation for both global and local FedQueue.
+   *          contains the ideal allocation for both global and local FederationQueue.
    * @param global the {@code FederationGlobalView} that we want to update.
    */
   public static void updateIdealAlloc(
@@ -218,26 +216,25 @@ public class GlobalQueuesConversionUtils {
     recursiveUpdate(global.getGlobal(), global.getSubClusters(), rootAsTQ);
   }
 
-  private static void recursiveUpdate(FedQueue globalRoot,
-      List<FedQueue> localRoots,
+  private static void recursiveUpdate(FederationQueue globalRoot,
+      List<FederationQueue> localRoots,
       GlobalFederationTempQueuePerPartition inputGTQ) {
 
     // update this node
-    globalRoot.setIdealalloc(new ResourceInfo(inputGTQ.getIdealAssigned()));
+    globalRoot.setIdealAlloc(inputGTQ.getIdealAssigned());
 
-    for (FedQueue local : localRoots) {
-      local.setIdealalloc(new ResourceInfo(
-          inputGTQ.getLocalSelf(local.getScope()).getIdealAssigned()));
+    for (FederationQueue local : localRoots) {
+      local.setIdealAlloc(inputGTQ.getLocalSelf(local.getSubClusterId()).getIdealAssigned());
     }
 
     // recurse to all children (both global and local)
-    for (FedQueue globalChild : globalRoot.getChildren()) {
+    for (FederationQueue globalChild : globalRoot.getChildren().values()) {
       TempQueuePerPartition t =
-          inputGTQ.getChildrenByName(globalChild.getQueuename());
+          inputGTQ.getChildrenByName(globalChild.getQueueName());
 
-      List<FedQueue> localChildren = new ArrayList<>();
-      for (FedQueue lChild : localRoots) {
-        localChildren.add(lChild.getChildrenByName(globalChild.getQueuename()));
+      List<FederationQueue> localChildren = new ArrayList<>();
+      for (FederationQueue lChild : localRoots) {
+        localChildren.add(lChild.getChildByName(globalChild.getQueueName()));
       }
 
       recursiveUpdate(globalChild, localChildren,

@@ -44,7 +44,7 @@ public class GlobalAllocationCalculator {
    */
   public void computeOverallAllocation(FederationGlobalView global) {
 
-    FedQueue root = global.getGlobal();
+    FederationQueue root = global.getGlobal();
     GlobalFederationTempQueuePerPartition rootAsTQ = GlobalQueuesConversionUtils
         .getAsMergedTempQueuePerPartition(rc, global);
 
@@ -54,8 +54,7 @@ public class GlobalAllocationCalculator {
     FederationGlobalResourceCalculator prc =
         new FederationGlobalResourceCalculator(context, true);
 
-    prc.computeIdealAllocation(root.getTotCap().getResource(),
-        root.getTotCap().getResource());
+    prc.computeIdealAllocation(root.getTotCap(), root.getTotCap());
 
     GlobalQueuesConversionUtils.updateIdealAlloc(rootAsTQ, global);
 

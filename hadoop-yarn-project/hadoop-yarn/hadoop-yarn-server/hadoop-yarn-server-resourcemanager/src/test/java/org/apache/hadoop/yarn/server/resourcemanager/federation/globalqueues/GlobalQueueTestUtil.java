@@ -15,10 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.yarn.server.globalpolicygenerator.globalqueues;
+package org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.StringReader;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -28,10 +29,16 @@ import java.util.Map;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.jersey.api.json.JSONConfiguration;
+import com.sun.jersey.api.json.JSONJAXBContext;
+import com.sun.jersey.api.json.JSONUnmarshaller;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
+import org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues.FederationQueue;
+
+import javax.xml.bind.JAXBException;
 
 /**
  * This class provides support methods for all global queue tests.
@@ -129,5 +136,42 @@ public final class GlobalQueueTestUtil {
       res.setVirtualCores(Integer.parseInt(resMap.get("vCores").toString()));
     }
     return res;
+  }
+
+  public static FederationGlobalView parseCluster(String queueFile)
+          throws IOException, JAXBException,
+          FederationGlobalQueueValidationException {
+    String queueJson = loadFile(queueFile);
+
+    JSONJAXBContext jc = new JSONJAXBContext(JSONConfiguration.mapped().build(),
+            FederationGlobalView.class);
+    JSONUnmarshaller unmarshaller = jc.createJSONUnmarshaller();
+    FederationGlobalView federationGlobalView = unmarshaller.unmarshalFromJSON(
+            new StringReader(queueJson), FederationGlobalView.class);
+
+    propagateAndMergeFedView(federationGlobalView, true);
+    return federationGlobalView;
+  }
+
+  /**
+   * Propagates children capacities up the tree and merge all subtrees to a
+   * global tree.
+   *
+   * @param federationGlobalView the FederationGlobalView that will get updated.
+   * @param validate if true, validate queues
+   */
+  public static void propagateAndMergeFedView(
+          FederationGlobalView federationGlobalView, boolean validate)
+          throws FederationGlobalQueueValidationException {
+    for (FederationQueue fedQueue : federationGlobalView.getSubClusters()) {
+      fedQueue.propagateCapacities();
+    }
+
+    if (validate) {
+      federationGlobalView.validate();
+    }
+
+    federationGlobalView.setGlobal(FederationQueue.mergeQueues(
+            federationGlobalView.getSubClusters(), SubClusterId.newInstance("global")));
   }
 }

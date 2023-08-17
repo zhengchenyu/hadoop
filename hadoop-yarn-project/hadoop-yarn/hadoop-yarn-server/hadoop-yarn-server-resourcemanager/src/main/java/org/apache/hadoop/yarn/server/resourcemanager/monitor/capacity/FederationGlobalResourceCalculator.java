@@ -35,7 +35,7 @@ public class FederationGlobalResourceCalculator
   public FederationGlobalResourceCalculator(
       CapacitySchedulerPreemptionContext preemptionContext,
       boolean isReservedPreemptionCandidatesSelector) {
-    super(preemptionContext, isReservedPreemptionCandidatesSelector);
+    super(preemptionContext, isReservedPreemptionCandidatesSelector, false);
   }
 
   /**
@@ -45,7 +45,7 @@ public class FederationGlobalResourceCalculator
   @Override
   protected void initIdealAssignment(Resource totGuarant,
       TempQueuePerPartition q, Resource initIdealAssigned) {
-    q.offer(initIdealAssigned, rc, totGuarant, false);
+    q.offer(initIdealAssigned, rc, totGuarant, false, false);
   }
 
   @Override

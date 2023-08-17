@@ -46,15 +46,15 @@ public class GlobalQueueAlgoBaseTest {
   @Parameterized.Parameter(value = 0)
   public String inputFile;
 
-  private void recursiveCheckInvariants(FedQueue root, boolean global)
+  private void recursiveCheckInvariants(FederationQueue root, boolean global)
       throws FederationGlobalQueueValidationException {
 
     if (root.getExpectedIdealAlloc() != null) {
       assertEquals(
-          "IdealAllocation for queue " + root.getQueuename() + " in subcluster "
-              + root.getScope() + " is off from expected ",
-          root.getExpectedIdealAlloc().getResource(),
-          root.getIdealalloc().getResource());
+          "IdealAllocation for queue " + root.getQueueName() + " in subcluster "
+              + root.getSubClusterId() + " is off from expected ",
+          root.getExpectedIdealAlloc(),
+          root.getIdealAlloc());
     }
 
     // If we are not a leaf, propagate down and check child-self coherence
@@ -63,22 +63,22 @@ public class GlobalQueueAlgoBaseTest {
       Resource childrenPreemption = Resources.createResource(0, 0);
 
       // if we have idealAlloc set check consistency
-      if (root.getIdealalloc() != null) {
-        for (FedQueue c : root.getChildren()) {
-          if (c.getIdealalloc() != null) {
+      if (root.getIdealAlloc() != null) {
+        for (FederationQueue c : root.getChildren().values()) {
+          if (c.getIdealAlloc() != null) {
             Resources.addTo(childrenIdealAlloc,
-                c.getIdealalloc().getResource());
+                c.getIdealAlloc());
           }
         }
         assertEquals(
-            "IdealAlloc for " + root.getQueuename() + "@" + root.getScope()
-                + " is: " + root.getIdealalloc().getResource()
+            "IdealAlloc for " + root.getQueueName() + "@" + root.getSubClusterId()
+                + " is: " + root.getIdealAlloc()
                 + " but sum of children is " + childrenIdealAlloc,
-            root.getIdealalloc().getResource(), childrenIdealAlloc);
+            root.getIdealAlloc(), childrenIdealAlloc);
       }
 
       // recurse down
-      for (FedQueue c : root.getChildren()) {
+      for (FederationQueue c : root.getChildren().values()) {
         recursiveCheckInvariants(c, global);
       }
     }
@@ -91,18 +91,18 @@ public class GlobalQueueAlgoBaseTest {
       fgv.getGlobal().validate();
     }
 
-    for (FedQueue lr : fgv.getSubClusters()) {
+    for (FederationQueue lr : fgv.getSubClusters()) {
       // validate already recursively checks the tree
       lr.validate();
       recursiveCheckInvariants(lr, global);
     }
   }
 
-  protected FedQueue getQueue(List<FedQueue> local, String sc,
+  protected FederationQueue getQueue(List<FederationQueue> local, String sc,
       String queueName) {
-    for (FedQueue l : local) {
-      if (l.getScope().equals(sc)) {
-        return l.getChildrenByName(queueName);
+    for (FederationQueue l : local) {
+      if (l.getSubClusterId().equals(sc)) {
+        return l.getChildByName(queueName);
       }
     }
     return null;

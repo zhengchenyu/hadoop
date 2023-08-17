@@ -188,8 +188,23 @@ public class MinimalCSPreemptionContext
   }
 
   @Override
+  public long getDefaultMaximumKillWaitTimeout() {
+    return 0;
+  }
+
+  @Override
   public ProportionalCapacityPreemptionPolicy.IntraQueuePreemptionOrderPolicy getIntraQueuePreemptionOrderPolicy() {
     throw new NotImplementedException(
         "Method not implemented by " + this.getClass().getCanonicalName());
+  }
+
+  @Override
+  public boolean getCrossQueuePreemptionConservativeDRF() {
+    return false;
+  }
+
+  @Override
+  public boolean getInQueuePreemptionConservativeDRF() {
+    return false;
   }
 }

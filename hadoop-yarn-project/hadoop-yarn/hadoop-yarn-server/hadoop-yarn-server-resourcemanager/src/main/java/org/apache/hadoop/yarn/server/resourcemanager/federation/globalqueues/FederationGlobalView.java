@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.yarn.server.globalpolicygenerator.globalqueues;
+package org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues;
 
 import java.util.ArrayList;
 import java.util.List;

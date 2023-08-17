@@ -25,6 +25,7 @@ import java.math.BigDecimal;
 import java.util.Map;
 import java.util.TreeMap;
 
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
@@ -40,8 +41,6 @@ import org.ojalgo.optimisation.Optimisation.Result;
 import org.ojalgo.optimisation.Variable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.google.common.annotations.VisibleForTesting;
 
 /**
  * A LP(Linear Programming) solution to map queues to sub-cluters. The current
@@ -102,8 +101,8 @@ public class LPQueueRebalancer {
 
     // EXTRACT SUBCLUSTER SIZES
     Map<SubClusterId, Resource> subClusterSizes = new TreeMap<>();
-    for (FedQueue fq : federationGlobalView.getSubClusters()) {
-      subClusterSizes.put(fq.getScope(), fq.getTotCap().getResource());
+    for (FederationQueue fq : federationGlobalView.getSubClusters()) {
+      subClusterSizes.put(fq.getSubClusterId(), fq.getTotCap());
     }
 
     // EXTRACT QUEUE SIZES AND AFFINITY TO SUBCLUSTERS
@@ -122,14 +121,14 @@ public class LPQueueRebalancer {
           .values()) {
         affinity[i][j] = Resources.ratio(rc,
             Resources.add(localLeaf.getPending(), localLeaf.getUsed()),
-            federationGlobalView.getGlobal().getTotCap().getResource());
+            federationGlobalView.getGlobal().getTotCap());
         j++;
       }
       i++;
     }
 
     // INIT PROBLEM
-    initProblem(federationGlobalView.getGlobal().getTotCap().getResource(), rc,
+    initProblem(federationGlobalView.getGlobal().getTotCap(), rc,
         leavesSizes, subClusterSizes, affinity);
 
   }
@@ -397,20 +396,20 @@ public class LPQueueRebalancer {
         .getAsMergedTempQueuePerPartition(rc, inputGlobalView);
 
     for (String queueName : gftq.getLeaves().keySet()) {
-      for (FedQueue root : inputGlobalView.getSubClusters()) {
-        Variable v = variablesByName.get(queueName + "_" + root.getScope());
+      for (FederationQueue root : inputGlobalView.getSubClusters()) {
+        Variable v = variablesByName.get(queueName + "_" + root.getSubClusterId());
         double value = v.getValue().doubleValue();
         Resource queueSizeInSubcluster = Resources.multiplyAndNormalizeUp(rc,
             totClusterCap, value, minAlloc);
 
-        root.getChildrenByName(queueName)
-            .setGuarCap(new ResourceInfo(queueSizeInSubcluster));
+        root.getChildByName(queueName)
+            .setGuarCap(queueSizeInSubcluster);
       }
     }
 
     // propagate up our guar settings to parents
-    for (FedQueue root : inputGlobalView.getSubClusters()) {
-      root.propagate();
+    for (FederationQueue root : inputGlobalView.getSubClusters()) {
+      root.propagateCapacities();
     }
 
     return inputGlobalView;
