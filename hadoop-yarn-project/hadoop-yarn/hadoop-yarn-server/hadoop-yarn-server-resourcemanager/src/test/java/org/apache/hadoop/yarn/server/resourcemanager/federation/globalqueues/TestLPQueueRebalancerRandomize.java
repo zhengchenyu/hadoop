@@ -19,8 +19,10 @@ package org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues;
 
 import static org.junit.Assert.assertTrue;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Random;
 import java.util.TreeMap;
@@ -120,6 +122,11 @@ public class TestLPQueueRebalancerRandomize {
     long tend = System.currentTimeMillis();
     LOGGER.info("Runtime for " + numQueues + " queues " + numSubclusters
         + " sub-clusters is: " + (tend - tstart) + "ms");
+    int i = 0;
+    Iterator<BigDecimal> iterator = result.iterator();
+    while (iterator.hasNext()) {
+      System.out.println(String.format("value[%s] = %s", i, iterator.next()));
+    }
 
     // check result for optimality/feasibility
     Optimisation.State state = result.getState();

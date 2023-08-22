@@ -116,7 +116,7 @@ public class LPQueueRebalancer {
     Map<String, Resource> leavesSizes = new TreeMap<>();
     for (GlobalFederationTempQueuePerPartition lr : globalLeaves.values()) {
       int j = 0;
-      leavesSizes.put(lr.getQueueName(), lr.getGuaranteed());
+      leavesSizes.put(lr.getQueueName(), lr.getGuaranteed());   // getGuaranteed这里为配置设置的保证资源或最小资源
       for (GlobalFederationTempQueuePerPartition localLeaf : lr.getLocalSelves()
           .values()) {
         affinity[i][j] = Resources.ratio(rc,
@@ -207,6 +207,11 @@ public class LPQueueRebalancer {
    * @return a map of variable name to object.
    */
   private Map<String, Variable> generateVariables() {
+    
+    // 变量1: queue_subcluster >= 0,  队列+集群维度权重值。该值表示某个集群的某个队列的权重值，所有累计和趋近于1
+    // 变量2: scMaxLoad >= 0, ??
+    // 变量3: scMinLoad, ???
+    // 变量5: deltaLoad, ???
 
     // create variables Xij that determines the allocation of
     // queue i in subcluster j.
@@ -236,7 +241,11 @@ public class LPQueueRebalancer {
    * This method add constraints that ensure that each queue is fully assigned.
    */
   private void generateQueueFullyAssignedConstraints() {
-
+    // 对每个队列增加表达式约束 queue_full_alloc:
+    //   queue_resource / totClusterCap <= queue_subcluster * 1 <= queue_resource / totClusterCap
+    //   可以转化为:
+    //     sum (queue_subcluster * 1 by subcluster) = queue_resource / totClusterCap
+    // 含义: 同一个queue下对queue_subcluster按照subcluster维度聚合，一定要恰好等于该queue资源总和占总集群资源的比例
     // each queue is fully assigned
     for (Map.Entry<String, Resource> queue : queueSize.entrySet()) {
       Expression queueFullAllocation =
@@ -244,11 +253,11 @@ public class LPQueueRebalancer {
       for (Map.Entry<SubClusterId, Resource> subCluster : resourceAtSubcluster
           .entrySet()) {
         double queueSizeAsRatioOfTotal =
-            Resources.ratio(rc, queue.getValue(), totClusterCap);
+            Resources.ratio(rc, queue.getValue(), totClusterCap);     // 子集群占所有集群总容量的比例
         queueFullAllocation.set(
             variablesByName.get(queue.getKey() + "_" + subCluster.getKey()), 1);
         queueFullAllocation.lower(queueSizeAsRatioOfTotal);
-        queueFullAllocation.upper(queueSizeAsRatioOfTotal);
+        queueFullAllocation.upper(queueSizeAsRatioOfTotal);     // 这里是否需要增加一个精度
       }
     }
   }
@@ -258,6 +267,9 @@ public class LPQueueRebalancer {
    * overallocated.
    */
   private void generateSubClusterNotOverallocatedConstraints() {
+    // 对每个子集群增加表达式约束 subcluster_not_overallocated:
+    //   0 <= queue_subcluster * 1 <= sub_cluster_resource / totClusterCap
+    // 含义: queue_subcluster不得超过其子集群占总集群的比例
     for (Map.Entry<SubClusterId, Resource> subCluster : resourceAtSubcluster
         .entrySet()) {
       Expression subclusterNotOverallocated =
@@ -278,7 +290,14 @@ public class LPQueueRebalancer {
    * support-variables scLoadMin <= load on any subcluster <= scLoadMax.
    */
   private void generateSupportConstraintsForLoadBalancing() {
-
+    // 对每个子集群增加表达式约束 scMaxLoad_subcluster 和 scMinLoad_subcluster:
+    //   scMaxLoad_subcluster:
+    //     注: subClusterTotalCap为子集群资源占总集群资源的比例
+    //     scMaxLoad * -subClusterTotalCap + sum(queue_subcluster 每个子集群的所有queue_subcluster权重之和) < 0
+    //     scMinLoad * -subClusterTotalCap + sum(queue_subcluster 每个子集群的所有queue_subcluster权重之和) > 0 
+    //   总结:
+    //     scMinLoad * subClusterTotalCap <= sum(queue_subcluster 每个子集群的所有queue_subcluster权重之和) <= scMaxLoad * subClusterTotalCap
+    //   含义: 实际的每个子集群的权重值应该在最小权重与最大权重之间
     for (Map.Entry<SubClusterId, Resource> subCluster : resourceAtSubcluster
         .entrySet()) {
 
@@ -308,7 +327,9 @@ public class LPQueueRebalancer {
         scMin.lower(BigDecimal.valueOf(0));
       }
     }
-
+    // 增加表达式约束 deltaLoad_constraint
+    //   scMaxLoad * 1 + scMinLoad * -1 + deltaLoad * -1 < 0
+    // 含义: 因为scMaxLoad > scMinLoad, 所以scMaxLoad-scMinLoad>0. 所以deltaLoad必须大于0
     Expression delta = lpModel.addExpression("deltaLoad_constraint");
 
     delta.set(variablesByName.get("scMaxLoad"), 1);
@@ -322,7 +343,11 @@ public class LPQueueRebalancer {
    * Our primary objective is to load balance the cluster, i.e., to minimize the
    * gap between the two bounding variables scLoadMin and scLoadMax.
    */
+  // 目标是最小化scLoadMin和scLoadMax
   private void generatePrimaryObjective() {
+    // 增加表达式约束 maximize load balance
+    //   - deltaLoad
+    // 含义: 最小化deltaLoad. 这里设置了weight，第一求值只有一个该weight。表示第一次优化问题的目标函数就是最小化delta
     Expression objective = lpModel.addExpression("maximize load balance");
     // make it very bad for deltaLoad to be large
     objective.set(variablesByName.get("deltaLoad"), Float.valueOf(-1));
@@ -335,7 +360,12 @@ public class LPQueueRebalancer {
    * as a hard constraint (i.e., ensuring we are not decreasing load balance by
    * more than a configurable primary_to_secondary_epsilon).
    */
-  private void generateSecondaryObjectiveFunction(Result primaryResult) {
+  private void generateSecondaryObjectiveFunction(Result primaryResult) {   
+    // primaryResult为根据最小化负载得到的值。
+    
+    // 增加表达式约束 maximize load balance
+    //   result - primary_to_secondary_epsilon <= - deltaLoad <= result + primary_to_secondary_epsilon
+    // 含义: 最小化deltaLoad
 
     // add primaryObjective as a constraint (with a bit of slack)
     Expression primaryObjective =
@@ -349,6 +379,10 @@ public class LPQueueRebalancer {
     primaryObjective
         .lower(primaryResult.getValue() - primary_to_secondary_epsilon);
 
+    // 增加表达式约束 maximize affinity
+    //   sum(sum(queue_subcluster * affinityToSubcluster by subcluster) by queue)
+    //   注: affinityToSubcluster为单个集群的单个队列的used + pending占所有集群总资源的比例
+    // 含义: 这里会将queue_subcluster和实际资源使用情况做乘积，求其最大值。这里的含义是尽可能让queue_subcluster的权重值与实际的使用资源比例相同。
     int i = 0;
     Expression objective = lpModel.addExpression("maximize affinity");
     for (String queue : queueSize.keySet()) {

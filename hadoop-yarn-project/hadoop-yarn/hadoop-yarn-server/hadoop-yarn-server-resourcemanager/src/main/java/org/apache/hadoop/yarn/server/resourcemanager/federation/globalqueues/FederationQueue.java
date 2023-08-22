@@ -445,6 +445,7 @@ public class FederationQueue implements Iterable<FederationQueue> {
    * @param guarCap queue guaranteed capacity
    */
   public void setGuarCap(Resource guarCap) {
+    // 该值可以通过LPQueueRebalancer进行计算得到。
     this.guarCap = guarCap;
   }
 
