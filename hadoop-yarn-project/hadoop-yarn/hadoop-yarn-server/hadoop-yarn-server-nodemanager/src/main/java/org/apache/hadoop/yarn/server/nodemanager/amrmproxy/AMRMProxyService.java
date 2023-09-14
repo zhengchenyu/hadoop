@@ -490,7 +490,7 @@ public class AMRMProxyService extends CompositeService implements
           }
 
           try {
-            pipeline.getRootInterceptor().shutdown();
+            pipeline.getRootInterceptor().shutdown(false);
           } catch (Throwable ex) {
             LOG.warn("Failed to shutdown the request processing pipeline for app: {}.",
                 applicationAttemptId.getApplicationId(), ex);
@@ -567,7 +567,7 @@ public class AMRMProxyService extends CompositeService implements
       this.secretManager.applicationMasterFinished(pipeline.getApplicationAttemptId());
       LOG.info("Stopping the request processing pipeline for application: {}.", applicationId);
       try {
-        pipeline.getRootInterceptor().shutdown();
+        pipeline.getRootInterceptor().shutdown(true);
       } catch (Throwable ex) {
         LOG.warn("Failed to shutdown the request processing pipeline for app: {}.",
             applicationId, ex);

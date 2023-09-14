@@ -897,8 +897,15 @@ public class FederationInterceptor extends AbstractRequestInterceptor {
    * release all the resources that we are holding in this call.
    */
   @Override
-  public void shutdown() {
+  public void shutdown(boolean stop) {
     LOG.info("Shutting down FederationInterceptor for {}", this.attemptId);
+
+    if (stop) {
+      // When application is destoryed, we should force kill unmanaged application.
+      LOG.info("unmanaged application will be removed from secondary sub cluster, appid={}",
+          attemptId.getApplicationId());
+      this.uamPool.stop();
+    }
 
     // Do not stop uamPool service and kill UAMs here because of possible second
     // app attempt
@@ -923,7 +930,7 @@ public class FederationInterceptor extends AbstractRequestInterceptor {
     // Shutdown needs to clean up app
     removeAppFromRegistry();
 
-    super.shutdown();
+    super.shutdown(stop);
   }
 
   private void removeAppFromRegistry() {

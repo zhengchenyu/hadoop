@@ -518,6 +518,10 @@ public class TestUnmanagedApplicationManager {
     Assert.assertNotNull(unmanagedAppMasterMap);
     Assert.assertEquals(2, unmanagedAppMasterMap.size());
 
+    // threadpool may be shutdown before finishApplicationThread is executed.
+    threadpool.shutdownNow();
+    threadpool = null;
+
     // try to stop uamPool
     uamPool.stop();
     Assert.assertTrue(uamPool.waitForServiceToStop(2000));

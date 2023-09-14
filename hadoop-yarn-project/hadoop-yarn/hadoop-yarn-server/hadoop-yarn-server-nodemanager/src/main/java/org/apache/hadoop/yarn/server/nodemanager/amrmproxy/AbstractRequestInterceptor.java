@@ -97,9 +97,9 @@ public abstract class AbstractRequestInterceptor implements
    * Disposes the {@link RequestInterceptor}.
    */
   @Override
-  public void shutdown() {
+  public void shutdown(boolean stop) {
     if (this.nextInterceptor != null) {
-      this.nextInterceptor.shutdown();
+      this.nextInterceptor.shutdown(stop);
     }
   }
 
