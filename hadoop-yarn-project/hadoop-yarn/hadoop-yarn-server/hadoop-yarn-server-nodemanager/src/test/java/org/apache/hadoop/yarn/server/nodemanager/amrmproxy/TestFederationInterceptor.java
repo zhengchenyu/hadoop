@@ -38,15 +38,12 @@ import java.util.stream.Collectors;
 import org.apache.hadoop.registry.client.api.RegistryOperations;
 import org.apache.hadoop.registry.client.impl.FSRegistryOperationsService;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.LambdaTestUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterResponse;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationsRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationsResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -148,7 +145,7 @@ public class TestFederationInterceptor extends BaseAMRMProxyTest {
   @Override
   public void tearDown() {
     interceptor.cleanupRegistry();
-    interceptor.shutdown(false);
+    interceptor.shutdown();
     registry.stop();
     super.tearDown();
   }
@@ -1451,79 +1448,5 @@ public class TestFederationInterceptor extends BaseAMRMProxyTest {
     });
 
     Assert.assertEquals(0, interceptor.getRetryCount());
-  }
-
-  @Test
-  public void testDownWithKillUnManagedApplication() throws IOException, InterruptedException {
-    UserGroupInformation ugi =
-        interceptor.getUGIWithToken(interceptor.getAttemptId());
-    ugi.doAs((PrivilegedExceptionAction<Object>) () -> {
-      // Register the application
-      RegisterApplicationMasterRequest registerReq =
-          Records.newRecord(RegisterApplicationMasterRequest.class);
-      registerReq.setHost(Integer.toString(testAppId));
-      registerReq.setRpcPort(0);
-      registerReq.setTrackingUrl("");
-
-      RegisterApplicationMasterResponse registerResponse =
-          interceptor.registerApplicationMaster(registerReq);
-      Assert.assertNotNull(registerResponse);
-      lastResponseId = 0;
-
-      Assert.assertEquals(0, interceptor.getUnmanagedAMPoolSize());
-
-      // Allocate the first batch of containers, with sc1 and sc2 active
-      registerSubCluster(SubClusterId.newInstance("SC-1"));
-      registerSubCluster(SubClusterId.newInstance("SC-2"));
-
-      int numberOfContainers = 3;
-      List<Container> containers =
-          getContainersAndAssert(numberOfContainers, numberOfContainers * 2);
-      Assert.assertEquals(2, interceptor.getUnmanagedAMPoolSize());
-
-      // Allocate the second batch of containers, with sc1 and sc3 active
-      deRegisterSubCluster(SubClusterId.newInstance("SC-2"));
-      registerSubCluster(SubClusterId.newInstance("SC-3"));
-
-      numberOfContainers = 1;
-      containers.addAll(
-          getContainersAndAssert(numberOfContainers, numberOfContainers * 2));
-      Assert.assertEquals(3, interceptor.getUnmanagedAMPoolSize());
-
-      // Allocate the third batch of containers with only in home sub-cluster
-      // active
-      deRegisterSubCluster(SubClusterId.newInstance("SC-1"));
-      deRegisterSubCluster(SubClusterId.newInstance("SC-3"));
-      registerSubCluster(SubClusterId.newInstance(HOME_SC_ID));
-
-      numberOfContainers = 2;
-      containers.addAll(
-          getContainersAndAssert(numberOfContainers, numberOfContainers));
-      Assert.assertEquals(3, interceptor.getUnmanagedAMPoolSize());
-
-      // Release all containers
-      releaseContainersAndAssert(containers);
-
-      // Force kill application
-      interceptor.shutdown(true);
-
-      Thread finishApplicationThread =
-          interceptor.getUnmanagedAMPool().getFinishApplicationThread();
-      GenericTestUtils.waitFor(() -> !finishApplicationThread.isAlive(),
-          100, 2000);
-
-      // check application whether exist in RMs or not
-      MockResourceManagerFacade homeRM = interceptor.getHomeRM();
-      GetApplicationsRequest request = GetApplicationsRequest.newInstance();
-      GetApplicationsResponse response = homeRM.getApplications(request);
-      Assert.assertEquals(0, response.getApplicationList().size());
-      Map<String, MockResourceManagerFacade> secondaries = interceptor.getSecondaryRMs();
-      Assert.assertEquals(3, secondaries.size());
-      for (MockResourceManagerFacade rm : secondaries.values()) {
-        response = rm.getApplications(request);
-        Assert.assertEquals(0, response.getApplicationList().size());
-      }
-      return null;
-    });
   }
 }

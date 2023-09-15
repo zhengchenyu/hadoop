@@ -186,7 +186,7 @@ public class TestFederationInterceptorSecure extends BaseAMRMProxyTest {
   @Override
   public void tearDown() {
     interceptor.cleanupRegistry();
-    interceptor.shutdown(false);
+    interceptor.shutdown();
     registry.stop();
     stopRpcServer();
     super.tearDown();

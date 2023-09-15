@@ -57,10 +57,8 @@ public interface RequestInterceptor extends DistributedSchedulingAMProtocol,
    * This will be called when the application pipeline is being destroyed. The
    * concrete implementations should dispose the resources and forward the
    * request to the next interceptor, if any.
-   *
-   * @param stop whether to stop uamPool.
    */
-  void shutdown(boolean stop);
+  void shutdown();
 
   /**
    * Sets the next interceptor in the pipeline. The concrete implementation of
