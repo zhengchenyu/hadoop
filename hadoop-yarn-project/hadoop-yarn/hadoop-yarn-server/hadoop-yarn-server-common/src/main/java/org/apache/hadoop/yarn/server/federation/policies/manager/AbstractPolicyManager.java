@@ -184,7 +184,8 @@ public abstract class AbstractPolicyManager implements
     return new FederationPolicyInitializationContext(newConf,
                   federationPolicyContext.getFederationSubclusterResolver(),
                   federationPolicyContext.getFederationStateStoreFacade(),
-                  federationPolicyContext.getHomeSubcluster());
+                  federationPolicyContext.getHomeSubcluster(),
+                  federationPolicyContext.getGlobalWeightMap());
   }
 
 }

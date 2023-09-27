@@ -36,6 +36,7 @@ import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterIdInfo;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterInfo;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
+import org.apache.hadoop.yarn.util.timeline.TimelineUtils;
 
 /**
  * Base abstract class for {@link FederationRouterPolicy} implementations, that
@@ -43,6 +44,8 @@ import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade
  */
 public abstract class AbstractRouterPolicy extends
     AbstractConfigurableFederationPolicy implements FederationRouterPolicy {
+
+  public static final String FEDERATION_POLICY_LABEL_TAG_PREFIX = "FEDERATION_POLICY_LABEL_TAG";
 
   @Override
   public void validate(WeightedPolicyInfo newPolicyInfo)
@@ -83,7 +86,12 @@ public abstract class AbstractRouterPolicy extends
    *
    * @throws YarnException if the policy fails to choose a sub-cluster
    */
-  protected abstract SubClusterId chooseSubCluster(String queue,
+  protected SubClusterId chooseSubCluster(String queue,
+      Map<SubClusterId, SubClusterInfo> preSelectSubClusters) throws YarnException {
+    return chooseSubCluster(queue, null, preSelectSubClusters);
+  }
+
+  protected abstract SubClusterId chooseSubCluster(String queue, String label,
       Map<SubClusterId, SubClusterInfo> preSelectSubClusters) throws YarnException;
 
   /**
@@ -150,8 +158,17 @@ public abstract class AbstractRouterPolicy extends
       blackLists.forEach(filteredSubClusters::remove);
     }
 
+    // appContext.getApplicationTags()
+    String label = null;
+    for (String tag : appContext.getApplicationTags()) {
+      if (tag.startsWith(FEDERATION_POLICY_LABEL_TAG_PREFIX + ":") ||
+          tag.startsWith(FEDERATION_POLICY_LABEL_TAG_PREFIX.toLowerCase() + ":")) {
+        label = tag.substring(FEDERATION_POLICY_LABEL_TAG_PREFIX.length() + 1);
+      }
+    }
+
     // pick the chosen subCluster from the active ones
-    return chooseSubCluster(appContext.getQueue(), filteredSubClusters);
+    return chooseSubCluster(appContext.getQueue(), label, filteredSubClusters);
   }
 
   /**

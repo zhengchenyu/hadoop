@@ -78,7 +78,7 @@ public class LocalityRouterPolicy extends WeightedRandomRouterPolicy {
     super.reinitialize(policyContext);
     resolver = policyContext.getFederationSubclusterResolver();
     Map<SubClusterIdInfo, Float> weights =
-        getPolicyInfo().getRouterPolicyWeights();
+        getPolicyInfo(null).getRouterPolicyWeights();
     enabledSCs = new ArrayList<>();
     for (Map.Entry<SubClusterIdInfo, Float> entry : weights.entrySet()) {
       if (entry != null && entry.getValue() > 0) {
