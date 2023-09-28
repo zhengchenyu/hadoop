@@ -33,11 +33,11 @@ import org.apache.hadoop.yarn.server.federation.store.records.SubClusterInfo;
 public class PriorityRouterPolicy extends AbstractRouterPolicy {
 
   @Override
-  protected SubClusterId chooseSubCluster(String queue, String label,
-      Map<SubClusterId, SubClusterInfo> preSelectSubclusters) throws YarnException {
+  protected SubClusterId chooseSubCluster(
+      String queue, Map<SubClusterId, SubClusterInfo> preSelectSubclusters) throws YarnException {
     // This finds the sub-cluster with the highest weight among the
     // currently active ones.
-    Map<SubClusterIdInfo, Float> weights = getPolicyInfo(label).getRouterPolicyWeights();
+    Map<SubClusterIdInfo, Float> weights = getPolicyInfo().getRouterPolicyWeights();
     SubClusterId chosen = null;
     Float currentBest = Float.MIN_VALUE;
     for (SubClusterId id : preSelectSubclusters.keySet()) {

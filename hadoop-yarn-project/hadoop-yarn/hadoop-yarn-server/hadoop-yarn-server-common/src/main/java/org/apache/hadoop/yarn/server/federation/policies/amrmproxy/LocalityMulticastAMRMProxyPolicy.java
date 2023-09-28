@@ -193,7 +193,7 @@ public class LocalityMulticastAMRMProxyPolicy extends AbstractAMRMProxyPolicy {
       throws FederationPolicyInitializationException {
 
     // save reference to old weights
-    WeightedPolicyInfo tempPolicy = getPolicyInfo(null);
+    WeightedPolicyInfo tempPolicy = getPolicyInfo();
 
     super.reinitialize(policyContext);
     if (!getIsDirty()) {
@@ -202,7 +202,7 @@ public class LocalityMulticastAMRMProxyPolicy extends AbstractAMRMProxyPolicy {
 
     Map<SubClusterId, Float> newWeightsConverted = new HashMap<>();
     boolean allInactive = true;
-    WeightedPolicyInfo policy = getPolicyInfo(null);
+    WeightedPolicyInfo policy = getPolicyInfo();
 
     if (policy.getAMRMPolicyWeights() != null
         && policy.getAMRMPolicyWeights().size() > 0) {

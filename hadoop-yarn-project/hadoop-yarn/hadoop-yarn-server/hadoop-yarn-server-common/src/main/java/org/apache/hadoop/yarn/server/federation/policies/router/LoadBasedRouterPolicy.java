@@ -42,13 +42,13 @@ public class LoadBasedRouterPolicy extends AbstractRouterPolicy {
       throws FederationPolicyInitializationException {
 
     // remember old policyInfo
-    WeightedPolicyInfo tempPolicy = getPolicyInfo(null);
+    WeightedPolicyInfo tempPolicy = getPolicyInfo();
 
     // attempt new initialization
     super.reinitialize(policyContext);
 
     // check extra constraints
-    for (Float weight : getPolicyInfo(null).getRouterPolicyWeights().values()) {
+    for (Float weight : getPolicyInfo().getRouterPolicyWeights().values()) {
       if (weight != 0 && weight != 1) {
         // reset to old policyInfo if check fails
         setPolicyInfo(tempPolicy);
@@ -61,9 +61,9 @@ public class LoadBasedRouterPolicy extends AbstractRouterPolicy {
   }
 
   @Override
-  protected SubClusterId chooseSubCluster(String queue, String label,
-      Map<SubClusterId, SubClusterInfo> preSelectSubclusters) throws YarnException {
-    Map<SubClusterIdInfo, Float> weights = getPolicyInfo(label).getRouterPolicyWeights();
+  protected SubClusterId chooseSubCluster(
+      String queue, Map<SubClusterId, SubClusterInfo> preSelectSubclusters) throws YarnException {
+    Map<SubClusterIdInfo, Float> weights = getPolicyInfo().getRouterPolicyWeights();
     SubClusterIdInfo chosen = null;
     long currBestMem = -1;
     for (Map.Entry<SubClusterId, SubClusterInfo> entry : preSelectSubclusters.entrySet()) {

@@ -98,10 +98,7 @@ public abstract class AbstractConfigurableFederationPolicy
    * @return the {@link WeightedPolicyInfo} representing the policy
    *         configuration.
    */
-  public WeightedPolicyInfo getPolicyInfo(String label) {
-    if (label != null && getPolicyContext().getGlobalWeightMap().containsKey(label)) {
-      getPolicyContext().getGlobalWeightMap().get(label);
-    }
+  public WeightedPolicyInfo getPolicyInfo() {
     return policyInfo;
   }
 

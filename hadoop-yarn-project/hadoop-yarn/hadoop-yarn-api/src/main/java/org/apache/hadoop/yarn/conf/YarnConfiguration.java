@@ -4124,9 +4124,6 @@ public class YarnConfiguration extends Configuration {
 
   public static final String DEFAULT_FEDERATION_POLICY_MANAGER_PARAMS = "";
 
-  public static final String FEDERATION_POLICY_MANAGER_PARAMS_LABELED_PREFIX =
-      FEDERATION_PREFIX + "policy-manager-params.labeled.";
-
   public static final String FEDERATION_STATESTORE_ZK_PREFIX =
       FEDERATION_PREFIX + "zk-state-store.";
   /** Parent znode path under which ZKRMStateStore will create znodes. */

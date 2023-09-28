@@ -28,7 +28,6 @@ import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.protocolrecords.ReservationSubmissionRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
-import org.apache.hadoop.yarn.server.federation.policies.dao.WeightedPolicyInfo;
 import org.apache.hadoop.yarn.server.federation.policies.exceptions.FederationPolicyException;
 import org.apache.hadoop.yarn.server.federation.policies.exceptions.FederationPolicyInitializationException;
 import org.apache.hadoop.yarn.server.federation.policies.manager.FederationPolicyManager;
@@ -54,7 +53,6 @@ public class RouterPolicyFacade {
   private final SubClusterResolver subClusterResolver;
   private final FederationStateStoreFacade federationFacade;
   private Map<String, SubClusterPolicyConfiguration> globalConfMap;
-  private Map<String, WeightedPolicyInfo> globalWeightMap;
 
   @VisibleForTesting
   Map<String, FederationRouterPolicy> globalPolicyMap;
@@ -68,7 +66,6 @@ public class RouterPolicyFacade {
     this.subClusterResolver = resolver;
     this.globalConfMap = new ConcurrentHashMap<>();
     this.globalPolicyMap = new ConcurrentHashMap<>();
-    this.globalWeightMap = new ConcurrentHashMap<>();
 
     // load default behavior from store if possible
     String defaultKey = YarnConfiguration.DEFAULT_FEDERATION_POLICY_KEY;
@@ -95,19 +92,10 @@ public class RouterPolicyFacade {
           defaultFederationPolicyManager, defaultPolicyParam);
     }
 
-    Map<String, String> params =
-        conf.getPropsWithPrefix(YarnConfiguration.FEDERATION_POLICY_MANAGER_PARAMS_LABELED_PREFIX);
-    for (Map.Entry<String, String> entry : params.entrySet()) {
-      ByteBuffer buffer = ByteBuffer.wrap(entry.getValue().getBytes(StandardCharsets.UTF_8));
-      WeightedPolicyInfo info = WeightedPolicyInfo.fromByteBuffer(buffer);
-      globalWeightMap.put(entry.getKey(), info);
-      // TODO: Check WeightedPolicyInfo
-    }
-
     // construct the required policy manager
     FederationPolicyInitializationContext fallbackContext =
         new FederationPolicyInitializationContext(configuration,
-            subClusterResolver, federationFacade, homeSubcluster, globalWeightMap);
+            subClusterResolver, federationFacade, homeSubcluster);
     FederationPolicyManager fallbackPolicyManager =
         FederationPolicyUtils.instantiatePolicyManager(configuration.getType());
     fallbackPolicyManager.setQueue(defaultKey);
@@ -188,7 +176,7 @@ public class RouterPolicyFacade {
 
     FederationPolicyInitializationContext context =
         new FederationPolicyInitializationContext(conf, subClusterResolver,
-            federationFacade, null, globalWeightMap);
+            federationFacade, null);
     String newType = context.getSubClusterPolicyConfiguration().getType();
     FederationRouterPolicy routerPolicy = policyMap.get(queue);
 

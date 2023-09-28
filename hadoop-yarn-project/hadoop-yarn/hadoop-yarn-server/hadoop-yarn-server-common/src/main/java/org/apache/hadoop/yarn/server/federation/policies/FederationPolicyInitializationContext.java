@@ -17,13 +17,10 @@
 
 package org.apache.hadoop.yarn.server.federation.policies;
 
-import org.apache.hadoop.yarn.server.federation.policies.dao.WeightedPolicyInfo;
 import org.apache.hadoop.yarn.server.federation.resolver.SubClusterResolver;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterPolicyConfiguration;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
-
-import java.util.Map;
 
 /**
  * Context to (re)initialize a {@code FederationAMRMProxyPolicy} and {@code
@@ -35,29 +32,20 @@ public class FederationPolicyInitializationContext {
   private SubClusterResolver federationSubclusterResolver;
   private FederationStateStoreFacade federationStateStoreFacade;
   private SubClusterId homeSubcluster;
-  Map<String, WeightedPolicyInfo> globalWeightMap;
 
   public FederationPolicyInitializationContext() {
     federationPolicyConfiguration = null;
     federationSubclusterResolver = null;
     federationStateStoreFacade = null;
-    globalWeightMap = null;
   }
 
   public FederationPolicyInitializationContext(
       SubClusterPolicyConfiguration policy, SubClusterResolver resolver,
       FederationStateStoreFacade storeFacade, SubClusterId home) {
-    this(policy, resolver, storeFacade, home, null);
-  }
-
-  public FederationPolicyInitializationContext(SubClusterPolicyConfiguration policy,
-      SubClusterResolver resolver, FederationStateStoreFacade storeFacade, SubClusterId home,
-      Map<String, WeightedPolicyInfo> globalWeightMap) {
     this.federationPolicyConfiguration = policy;
     this.federationSubclusterResolver = resolver;
     this.federationStateStoreFacade = storeFacade;
     this.homeSubcluster = home;
-    this.globalWeightMap = globalWeightMap;
   }
 
   /**
@@ -139,7 +127,4 @@ public class FederationPolicyInitializationContext {
     this.homeSubcluster = homeSubcluster;
   }
 
-  public Map<String, WeightedPolicyInfo> getGlobalWeightMap() {
-    return globalWeightMap;
-  }
 }
