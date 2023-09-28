@@ -204,10 +204,10 @@ public class LocalityMulticastAMRMProxyPolicy extends AbstractAMRMProxyPolicy {
     boolean allInactive = true;
     WeightedPolicyInfo policy = getPolicyInfo();
 
-    if (policy.getAMRMPolicyWeights() != null
-        && policy.getAMRMPolicyWeights().size() > 0) {
-      for (Map.Entry<SubClusterIdInfo, Float> e : policy.getAMRMPolicyWeights()
-          .entrySet()) {
+    if (policy.getAMRMPolicyWeights(policyContext.getApplicationTag()) != null &&
+        policy.getAMRMPolicyWeights(policyContext.getApplicationTag()).size() > 0) {
+      for (Map.Entry<SubClusterIdInfo, Float> e : policy.getAMRMPolicyWeights(
+          policyContext.getApplicationTag()).entrySet()) {
         if (e.getValue() > 0) {
           allInactive = false;
         }

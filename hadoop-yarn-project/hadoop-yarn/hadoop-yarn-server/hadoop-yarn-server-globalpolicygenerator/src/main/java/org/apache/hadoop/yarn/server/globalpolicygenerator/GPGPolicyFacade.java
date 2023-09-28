@@ -129,8 +129,8 @@ public class GPGPolicyFacade {
               (WeightedLocalityPolicyManager) policyManager;
           LOG.info("Updating policy for queue {} to configured weights router: "
                   + "{}, amrmproxy: {}", queueName,
-              wpinfo.getRouterPolicyWeights(),
-              wpinfo.getAMRMPolicyWeights());
+              wpinfo.getRouterPolicyWeightsMap(),
+              wpinfo.getAmrmPolicyWeightsMap());      // TODO: check output string?????
           wlpmanager.setWeightedPolicyInfo(wpinfo);
         } else {
           LOG.warn("Warning: FederationPolicyManager of unsupported type {}, "
