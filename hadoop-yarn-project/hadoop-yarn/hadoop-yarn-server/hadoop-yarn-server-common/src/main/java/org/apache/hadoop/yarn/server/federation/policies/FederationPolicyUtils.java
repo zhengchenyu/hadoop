@@ -53,6 +53,7 @@ public final class FederationPolicyUtils {
       "No active SubCluster available to submit the request.";
 
   public static final String FEDERATION_POLICY_LABEL_TAG_PREFIX = "FEDERATION_POLICY_LABEL_TAG";
+  public static final String DEFAULT_POLICY_KEY = "DEFAULT";
 
   private static Random rand = new Random(System.currentTimeMillis());
 
@@ -184,9 +185,9 @@ public final class FederationPolicyUtils {
 
   public static String getApplicationPolicyTag(ApplicationSubmissionContext appContext) {
     if (appContext == null) {
-      return null;
+      return DEFAULT_POLICY_KEY;
     }
-    String tag = null;
+    String tag = DEFAULT_POLICY_KEY;
     for (String appTag : appContext.getApplicationTags()) {
       if (appTag.startsWith(FEDERATION_POLICY_LABEL_TAG_PREFIX + ":") ||
           appTag.startsWith(FEDERATION_POLICY_LABEL_TAG_PREFIX.toLowerCase() + ":")) {

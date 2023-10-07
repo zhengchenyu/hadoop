@@ -34,6 +34,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.yarn.server.federation.policies.FederationPolicyUtils;
 import org.apache.hadoop.yarn.server.federation.policies.exceptions.FederationPolicyInitializationException;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterIdInfo;
@@ -85,7 +86,6 @@ public class WeightedPolicyInfo {
 
   private static final Logger LOG =
       LoggerFactory.getLogger(WeightedPolicyInfo.class);
-  public static final String DEFAULT_POLICY_KEY = "DEFAULT";
   private static JSONJAXBContext jsonjaxbContext = initContext();
   private Map<SubClusterIdInfo, Float> routerPolicyWeights = new HashMap<>();
   private Map<SubClusterIdInfo, Float> amrmPolicyWeights = new HashMap<>();
@@ -99,11 +99,11 @@ public class WeightedPolicyInfo {
   }
 
   private void initial() {
-    if (!routerPolicyWeightsMap.containsKey(DEFAULT_POLICY_KEY)) {
-      routerPolicyWeightsMap.put(DEFAULT_POLICY_KEY, PolicyWeights.create(routerPolicyWeights));
+    if (!routerPolicyWeightsMap.containsKey(FederationPolicyUtils.DEFAULT_POLICY_KEY)) {
+      routerPolicyWeightsMap.put(FederationPolicyUtils.DEFAULT_POLICY_KEY, PolicyWeights.create(routerPolicyWeights));
     }
-    if (!amrmPolicyWeightsMap.containsKey(DEFAULT_POLICY_KEY)) {
-      amrmPolicyWeightsMap.put(DEFAULT_POLICY_KEY, PolicyWeights.create(amrmPolicyWeights));
+    if (!amrmPolicyWeightsMap.containsKey(FederationPolicyUtils.DEFAULT_POLICY_KEY)) {
+      amrmPolicyWeightsMap.put(FederationPolicyUtils.DEFAULT_POLICY_KEY, PolicyWeights.create(amrmPolicyWeights));
     }
   }
 
@@ -157,14 +157,14 @@ public class WeightedPolicyInfo {
    * @return the router weights.
    */
   public Map<SubClusterIdInfo, Float> getRouterPolicyWeights() {
-    return getRouterPolicyWeights(DEFAULT_POLICY_KEY);
+    return getRouterPolicyWeights(FederationPolicyUtils.DEFAULT_POLICY_KEY);
   }
 
   public Map<SubClusterIdInfo, Float> getRouterPolicyWeights(String tag) {
     if (tag != null && routerPolicyWeightsMap.containsKey(tag)) {
       return routerPolicyWeightsMap.get(tag).getWeigths();
     }
-    return routerPolicyWeightsMap.get(DEFAULT_POLICY_KEY).getWeigths();
+    return routerPolicyWeightsMap.get(FederationPolicyUtils.DEFAULT_POLICY_KEY).getWeigths();
   }
 
   public Map<String, PolicyWeights> getRouterPolicyWeightsMap() {
@@ -177,7 +177,11 @@ public class WeightedPolicyInfo {
    * @param policyWeights the router weights.
    */
   public void setRouterPolicyWeights(Map<SubClusterIdInfo, Float> policyWeights) {
-    this.routerPolicyWeightsMap.put(DEFAULT_POLICY_KEY, PolicyWeights.create(policyWeights));
+    this.routerPolicyWeightsMap.put(FederationPolicyUtils.DEFAULT_POLICY_KEY, PolicyWeights.create(policyWeights));
+  }
+
+  public void setRouterPolicyWeights(String tag, Map<SubClusterIdInfo, Float> policyWeights) {
+    this.routerPolicyWeightsMap.put(tag, PolicyWeights.create(policyWeights));
   }
 
   /**
@@ -186,14 +190,14 @@ public class WeightedPolicyInfo {
    * @return the AMRMProxy weights.
    */
   public Map<SubClusterIdInfo, Float> getAMRMPolicyWeights() {
-    return getRouterPolicyWeights(DEFAULT_POLICY_KEY);
+    return getAMRMPolicyWeights(FederationPolicyUtils.DEFAULT_POLICY_KEY);
   }
 
   public Map<SubClusterIdInfo, Float> getAMRMPolicyWeights(String tag) {
     if (tag != null && amrmPolicyWeightsMap.containsKey(tag)) {
       return amrmPolicyWeightsMap.get(tag).getWeigths();
     }
-    return amrmPolicyWeightsMap.get(DEFAULT_POLICY_KEY).getWeigths();
+    return amrmPolicyWeightsMap.get(FederationPolicyUtils.DEFAULT_POLICY_KEY).getWeigths();
   }
 
   public Map<String, PolicyWeights> getAmrmPolicyWeightsMap() {
@@ -206,7 +210,11 @@ public class WeightedPolicyInfo {
    * @param policyWeights the amrmproxy weights.
    */
   public void setAMRMPolicyWeights(Map<SubClusterIdInfo, Float> policyWeights) {
-    amrmPolicyWeightsMap.put(DEFAULT_POLICY_KEY, PolicyWeights.create(policyWeights));
+    amrmPolicyWeightsMap.put(FederationPolicyUtils.DEFAULT_POLICY_KEY, PolicyWeights.create(policyWeights));
+  }
+
+  public void setAMRMPolicyWeights(String tag, Map<SubClusterIdInfo, Float> policyWeights) {
+    amrmPolicyWeightsMap.put(tag, PolicyWeights.create(policyWeights));
   }
 
   /**
@@ -378,24 +386,24 @@ public class WeightedPolicyInfo {
     marshaller.marshallToJSON(testClass, sw);
     System.out.println(sw);
     System.out.println("--------------");
-    SubClusterIdInfo subClusterIdInfo1 = new SubClusterIdInfo(SubClusterId.newInstance("ayarn1"));
-    SubClusterIdInfo subClusterIdInfo2 = new SubClusterIdInfo(SubClusterId.newInstance("ayarn2"));
+    SubClusterIdInfo subClusterIdInfo1 = new SubClusterIdInfo(SubClusterId.newInstance("SC1"));
+    SubClusterIdInfo subClusterIdInfo2 = new SubClusterIdInfo(SubClusterId.newInstance("SC2"));
     WeightedPolicyInfo weightedPolicyInfo = new WeightedPolicyInfo();
-    weightedPolicyInfo.routerPolicyWeights.put(subClusterIdInfo1, 0.5f);
-    weightedPolicyInfo.routerPolicyWeights.put(subClusterIdInfo2, 0.5f);
-    weightedPolicyInfo.amrmPolicyWeights.put(subClusterIdInfo1, 0.5f);
-    weightedPolicyInfo.amrmPolicyWeights.put(subClusterIdInfo2, 0.5f);
-    weightedPolicyInfo.headroomAlpha = 0;
+    weightedPolicyInfo.routerPolicyWeights.put(subClusterIdInfo1, 0.6f);
+    weightedPolicyInfo.routerPolicyWeights.put(subClusterIdInfo2, 0.4f);
+    weightedPolicyInfo.amrmPolicyWeights.put(subClusterIdInfo1, 0.3f);
+    weightedPolicyInfo.amrmPolicyWeights.put(subClusterIdInfo2, 0.7f);
+    weightedPolicyInfo.headroomAlpha = 1.0F;
     Map<SubClusterIdInfo, Float> weightedPolicyInfo1 = new HashMap<>();
     weightedPolicyInfo1.put(subClusterIdInfo1, 1f);
     weightedPolicyInfo1.put(subClusterIdInfo2, 0f);
     Map<SubClusterIdInfo, Float> weightedPolicyInfo2 = new HashMap<>();
     weightedPolicyInfo2.put(subClusterIdInfo1, 0f);
     weightedPolicyInfo2.put(subClusterIdInfo2, 1f);
-    weightedPolicyInfo.routerPolicyWeightsMap.put("ayarn1", PolicyWeights.create(weightedPolicyInfo1));
-    weightedPolicyInfo.routerPolicyWeightsMap.put("ayarn2", PolicyWeights.create(weightedPolicyInfo2));
-    weightedPolicyInfo.amrmPolicyWeightsMap.put("ayarn1", PolicyWeights.create(weightedPolicyInfo1));
-    weightedPolicyInfo.amrmPolicyWeightsMap.put("ayarn2", PolicyWeights.create(weightedPolicyInfo2));
+    weightedPolicyInfo.routerPolicyWeightsMap.put("LABEL1", PolicyWeights.create(weightedPolicyInfo1));
+    weightedPolicyInfo.routerPolicyWeightsMap.put("LABEL2", PolicyWeights.create(weightedPolicyInfo2));
+    weightedPolicyInfo.amrmPolicyWeightsMap.put("LABEL1", PolicyWeights.create(weightedPolicyInfo1));
+    weightedPolicyInfo.amrmPolicyWeightsMap.put("LABEL2", PolicyWeights.create(weightedPolicyInfo2));
     jsonjaxbContext = new JSONJAXBContext(JSONConfiguration.DEFAULT, WeightedPolicyInfo.class);
     marshaller = jsonjaxbContext.createJSONMarshaller();
     marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);

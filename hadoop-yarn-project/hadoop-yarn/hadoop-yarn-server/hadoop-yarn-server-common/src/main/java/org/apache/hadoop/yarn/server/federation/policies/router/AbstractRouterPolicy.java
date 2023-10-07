@@ -56,7 +56,7 @@ public abstract class AbstractRouterPolicy extends
       }
     }
     if (!newPolicyInfo.getRouterPolicyWeightsMap()
-        .containsKey(WeightedPolicyInfo.DEFAULT_POLICY_KEY)) {
+        .containsKey(FederationPolicyUtils.DEFAULT_POLICY_KEY)) {
       throw new FederationPolicyInitializationException("Default policy must be set.");
     }
   }

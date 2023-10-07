@@ -21,6 +21,7 @@ package org.apache.hadoop.yarn.server.federation.policies.router;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -73,18 +74,21 @@ public class LocalityRouterPolicy extends WeightedRandomRouterPolicy {
       LoggerFactory.getLogger(LocalityRouterPolicy.class);
 
   private SubClusterResolver resolver;
-  private Map<String, List<SubClusterId>> enabledSCsByTag = new HashMap<>();
+  private Map<String, Set<SubClusterId>> enabledSCsByTag;
 
   @Override
   public void reinitialize(FederationPolicyInitializationContext policyContext)
       throws FederationPolicyInitializationException {
     super.reinitialize(policyContext);
     resolver = policyContext.getFederationSubclusterResolver();
+    enabledSCsByTag = new HashMap();
     for (Map.Entry<String, WeightedPolicyInfo.PolicyWeights> entry : getPolicyInfo().
         getRouterPolicyWeightsMap().entrySet()) {
-      enabledSCsByTag.putIfAbsent(entry.getKey(), new ArrayList<>());
-      for (SubClusterIdInfo subClusterIdInfo : entry.getValue().getWeigths().keySet()) {
-        enabledSCsByTag.get(entry.getKey()).add(subClusterIdInfo.toId());
+      enabledSCsByTag.putIfAbsent(entry.getKey(), new HashSet<>());
+      for (Map.Entry<SubClusterIdInfo, Float> entry1 : entry.getValue().getWeigths().entrySet()) {
+        if (entry1 != null && entry1.getValue() > 0) {
+          enabledSCsByTag.get(entry.getKey()).add(entry1.getKey().toId());
+        }
       }
     }
   }

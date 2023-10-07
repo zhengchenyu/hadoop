@@ -23,6 +23,7 @@ import java.util.Map;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.server.federation.policies.AbstractConfigurableFederationPolicy;
+import org.apache.hadoop.yarn.server.federation.policies.FederationPolicyUtils;
 import org.apache.hadoop.yarn.server.federation.policies.dao.WeightedPolicyInfo;
 import org.apache.hadoop.yarn.server.federation.policies.exceptions.FederationPolicyInitializationException;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
@@ -48,7 +49,7 @@ public abstract class AbstractAMRMProxyPolicy extends
       }
     }
     if (!newPolicyInfo.getAmrmPolicyWeightsMap()
-        .containsKey(WeightedPolicyInfo.DEFAULT_POLICY_KEY)) {
+        .containsKey(FederationPolicyUtils.DEFAULT_POLICY_KEY)) {
       throw new FederationPolicyInitializationException("Default policy must be set.");
     }
   }
