@@ -150,8 +150,8 @@ public class ScriptBasedSubClusterResolverImpl extends AbstractSubClusterResolve
     }
     StringBuilder allOutput = new StringBuilder();
     List<String> cmdList = new ArrayList<String>();
-    cmdList.add(mode);
     cmdList.add(commandScriptName);
+    cmdList.add(mode);
     cmdList.add(arg);
     File dir = null;
     String userDir;
