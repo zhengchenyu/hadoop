@@ -145,7 +145,7 @@ public class ScriptBasedSubClusterResolverImpl extends AbstractSubClusterResolve
   }
 
   protected String runResolveCommand(String arg, String commandScriptName, String mode) {
-    if (StringUtils.isNotBlank(arg)) {
+    if (StringUtils.isBlank(arg)) {
       return null;
     }
     StringBuilder allOutput = new StringBuilder();
