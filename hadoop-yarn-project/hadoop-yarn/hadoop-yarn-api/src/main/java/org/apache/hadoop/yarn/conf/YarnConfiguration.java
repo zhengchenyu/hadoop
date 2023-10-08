@@ -4041,6 +4041,9 @@ public class YarnConfiguration extends Configuration {
       "org.apache.hadoop.yarn.server.federation.resolver."
           + "DefaultSubClusterResolverImpl";
 
+  public static final String FEDERATION_CLUSTER_RESOLVER_SCRIPT_FILE_NAME =
+      FEDERATION_PREFIX + "subcluster-resolver.script.file.name";
+
   public static final String FEDERATION_FACADE_CACHE_CLASS =
       FEDERATION_PREFIX + "cache.class";
   public static final String DEFAULT_FEDERATION_FACADE_CACHE_CLASS =
