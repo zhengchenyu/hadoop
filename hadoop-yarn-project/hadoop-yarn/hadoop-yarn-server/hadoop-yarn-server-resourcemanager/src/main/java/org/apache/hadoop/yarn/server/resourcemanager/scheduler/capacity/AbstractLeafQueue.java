@@ -1847,6 +1847,7 @@ public class AbstractLeafQueue extends AbstractCSQueue {
       if (null != rmContainer && rmContainer.getNodeLabelExpression().equals(
           RMNodeLabelsManager.NO_LABEL) && !nodePartition.equals(
           RMNodeLabelsManager.NO_LABEL)) {
+        // ??? 没有设置标签的任务的Container运行在非默认标签(Non-exclusive)的节点上 ???
         TreeSet<RMContainer> rmContainers = ignorePartitionExclusivityRMContainers.computeIfAbsent(
             nodePartition, k -> new TreeSet<>());
         rmContainers.add(rmContainer);

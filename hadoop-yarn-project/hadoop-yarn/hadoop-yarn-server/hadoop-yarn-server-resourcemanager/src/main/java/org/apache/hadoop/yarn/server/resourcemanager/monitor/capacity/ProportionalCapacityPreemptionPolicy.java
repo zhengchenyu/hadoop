@@ -129,7 +129,7 @@ public class ProportionalCapacityPreemptionPolicy
   private final Map<RMContainer,Long> preemptionCandidates =
     new HashMap<>();
   private Map<String, Map<String, TempQueuePerPartition>> queueToPartitions =
-      new HashMap<>();
+      new HashMap<>();      // Queue -> TempQueuePerPartition(即Queue按照分区划分的逻辑上的临时子Queue)
   private Map<String, LinkedHashSet<String>> partitionToUnderServedQueues =
       new HashMap<String, LinkedHashSet<String>>();
   private List<PreemptionCandidatesSelector> candidatesSelectionPolicies;
@@ -376,6 +376,7 @@ public class ProportionalCapacityPreemptionPolicy
           for (RMContainer container : e.getValue()) {
             // if we tried to preempt this for more than maxWaitTime, this
             // should be based on custom timeout per container per selector
+            // 对于超时的直接发送MARK_CONTAINER_FOR_KILLABLE事件
             if (preemptionCandidates.get(container) != null
                 && preemptionCandidates.get(container)
                 + pc.getKey().getMaximumKillWaitTimeMs() <= currentTime) {
@@ -392,6 +393,8 @@ public class ProportionalCapacityPreemptionPolicy
               }
 
               //otherwise just send preemption events
+              // 未超时的发送MARK_CONTAINER_FOR_PREEMPTION，并记录于preemptionCandidates
+              // 然后AM在allocate的时候，会发送这些container，等待AM端主动删除。如果AM不主动删除的话，可以能会走前面的分支超时由RM删除
               rmContext.getDispatcher().getEventHandler().handle(
                   new ContainerPreemptEvent(appAttemptId, container,
                       SchedulerEventType.MARK_CONTAINER_FOR_PREEMPTION));
@@ -457,7 +460,7 @@ public class ProportionalCapacityPreemptionPolicy
       Resource clusterResources) {
     // Sync killable containers from scheduler when lazy preemption enabled
     if (lazyPreempionEnabled) {
-      syncKillableContainersFromScheduler();
+      syncKillableContainersFromScheduler();      // 将PreemptableQueue中的killable container全部同步到killableContainers中
     }
 
     // All partitions to look at
@@ -465,12 +468,13 @@ public class ProportionalCapacityPreemptionPolicy
     partitions.addAll(scheduler.getRMContext()
         .getNodeLabelManager().getClusterNodeLabelNames());
     partitions.add(RMNodeLabelsManager.NO_LABEL);
-    this.allPartitions = ImmutableSet.copyOf(partitions);
+    this.allPartitions = ImmutableSet.copyOf(partitions);     // 生成当前所有node label的快照
 
     // extract a summary of the queues from scheduler
     synchronized (scheduler) {
       queueToPartitions.clear();
 
+      // 这里按照partition进行递归，对每个分区都从root队列开始进行生成TempQueuePerPartition的操作，最终会放入queueToPartitions存储
       for (String partitionToLookAt : allPartitions) {
         cloneQueues(root, Resources
                 .clone(nlm.getResourceByLabel(partitionToLookAt, clusterResources)),
@@ -480,11 +484,13 @@ public class ProportionalCapacityPreemptionPolicy
       // Update effective priority of queues
     }
 
+    // 获取所有Queue名字的列表。这里使用NO_LABEL遍历，因此可以获得所有的Queue的名字。
     this.leafQueueNames = ImmutableSet.copyOf(getLeafQueueNames(
         getQueueByPartition(CapacitySchedulerConfiguration.ROOT,
             RMNodeLabelsManager.NO_LABEL)));
 
     // compute total preemption allowed
+    // 计算允许抢占的资源，默认为0.1被的集群总资源。
     Resource totalPreemptionAllowed = Resources.multiply(clusterResources,
         percentageClusterPreemptionAllowed);
 
@@ -497,6 +503,7 @@ public class ProportionalCapacityPreemptionPolicy
         new HashMap<>();
     Map<PreemptionCandidatesSelector, Map<ApplicationAttemptId,
         Set<RMContainer>>> toPreemptPerSelector =  new HashMap<>();
+    // candidatesSelectionPolicies存储了一系列的selector，默认只有FifoCandidatesSelector
     for (PreemptionCandidatesSelector selector :
         candidatesSelectionPolicies) {
       long startTime = 0;
@@ -509,6 +516,7 @@ public class ProportionalCapacityPreemptionPolicy
       Map<ApplicationAttemptId, Set<RMContainer>> curCandidates =
           selector.selectCandidates(toPreempt, clusterResources,
               totalPreemptionAllowed);
+      // 记录每个selector计算得到的要被抢占的container
       toPreemptPerSelector.putIfAbsent(selector, curCandidates);
 
       if (LOG.isDebugEnabled()) {

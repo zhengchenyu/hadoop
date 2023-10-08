@@ -50,7 +50,7 @@ public class TempQueuePerPartition extends AbstractPreemptionEntity {
   Resource untouchableExtra;
   Resource preemptableExtra;
 
-  double[] normalizedGuarantee;
+  double[] normalizedGuarantee;     // 记录各个资源的保证值占总队列的比例，总队列为需求资源量大于保证资源量的队列
 
   private Resource effMinRes;
   private Resource effMaxRes;
@@ -228,6 +228,7 @@ public class TempQueuePerPartition extends AbstractPreemptionEntity {
     preemptableExtra = Resources.none();
 
     Resource extra = Resources.subtract(getUsed(), getGuaranteed());
+    // extra表示超出保证值的资源量。如果使用值小于保证值，则归为0。
     if (Resources.lessThan(rc, totalPartitionResource, extra,
         Resources.none())) {
       extra = Resources.none();
@@ -255,6 +256,8 @@ public class TempQueuePerPartition extends AbstractPreemptionEntity {
       }
       preemptableExtra = Resources.min(rc, totalPartitionResource,
           childrensPreemptable, extra);
+      // preemptableExtra存储的是队列使用的操作资源。如果是父队列，会取min(所有子队列超出资源之和, 父队列超出资源)
+      // untouchableExtra存储的是，父队列超出资源 - 所有子队列超出资源之和。
     }
   }
 

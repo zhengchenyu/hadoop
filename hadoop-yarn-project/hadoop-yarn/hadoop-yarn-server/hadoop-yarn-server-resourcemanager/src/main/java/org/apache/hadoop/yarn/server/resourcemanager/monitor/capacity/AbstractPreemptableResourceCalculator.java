@@ -49,6 +49,7 @@ public class AbstractPreemptableResourceCalculator {
   private boolean allowQueuesBalanceAfterAllQueuesSatisfied;
 
   static class TQComparator implements Comparator<TempQueuePerPartition> {
+    // 按照idealAssigned / guaranteed排序，升序。即需求占比越少的约排在前面。
     private ResourceCalculator rc;
     private Resource clusterRes;
 
@@ -179,6 +180,8 @@ public class AbstractPreemptableResourceCalculator {
       Resource used = q.getUsed();
 
       Resource initIdealAssigned;
+      // 对于使用资源超过保证值的时候，理想的分配资源为当前保证值+untouchableExtra(即父类余出来的资源)
+      // 对于使用资源未超过保证值的时候，理想的分配资源即为当前的使用资源。
       if (Resources.greaterThan(rc, totGuarant, used, q.getGuaranteed())) {
         initIdealAssigned = Resources.add(
             Resources.componentwiseMin(q.getGuaranteed(), q.getUsed()),
@@ -188,13 +191,16 @@ public class AbstractPreemptableResourceCalculator {
       }
 
       // perform initial assignment
+      // 初始化各个子类的理想分配资源idealAssigned
       initIdealAssignment(totGuarant, q, initIdealAssigned);
 
+      // 这里会将队列的idealAssigned从unassigned中减去，unassigned是从ROOT队列对应分区下的所有资源依次分给自队列后剩余的资源。
       Resources.subtractFrom(unassigned, q.idealAssigned);
 
       // If idealAssigned < (allocated + used + pending), q needs more
       // resources, so
       // add it to the list of underserved queues, ordered by need.
+      // 如果当前队列的任务的需求(已分配+使用+请求)资源大于理想分配资源，意味着当前队列需要更多资源，加入到orderedByNeed中
       Resource curPlusPend = Resources.add(q.getUsed(), q.pending);
       if (Resources.lessThan(rc, totGuarant, q.idealAssigned, curPlusPend)) {
         orderedByNeed.add(q);
@@ -207,7 +213,7 @@ public class AbstractPreemptableResourceCalculator {
         unassigned, Resources.none())) {
       // we compute normalizedGuarantees capacity based on currently active
       // queues
-      resetCapacity(orderedByNeed, ignoreGuarantee);
+      resetCapacity(orderedByNeed, ignoreGuarantee);      // 计算各个TempQueue的normalizedGuarantee
 
       // For each underserved queue (or set of queues if multiple are equally
       // underserved), offer its share of the unassigned resources based on its
@@ -215,6 +221,7 @@ public class AbstractPreemptableResourceCalculator {
       // place it back in the ordered list of queues, recalculating its place
       // in the order of most under-guaranteed to most over-guaranteed. In this
       // way, the most underserved queue(s) are always given resources first.
+      // 得到最需要资源的队列，应为已经是排序后的TempQueue，这里实际是拿出前几个计算后的normalizedGuarantee相等的TempQueue
       Collection<TempQueuePerPartition> underserved = getMostUnderservedQueues(
           orderedByNeed, tqComparator);
 
@@ -231,6 +238,7 @@ public class AbstractPreemptableResourceCalculator {
         TempQueuePerPartition sub = i.next();
 
         // How much resource we offer to the queue (to increase its ideal_alloc
+        // 按照比例看可以分给该TempQueue多少资源
         Resource wQavail = Resources.multiplyAndNormalizeUp(rc,
             dupUnassignedForTheRound,
             sub.normalizedGuarantee, this.stepFactor);
@@ -238,11 +246,13 @@ public class AbstractPreemptableResourceCalculator {
         // Make sure it is not beyond unassigned
         wQavail = Resources.componentwiseMin(wQavail, unassigned);
 
+        // 根据前面得到重新分配的wQavail,给TempQueue重新计算idealAssigned值
         Resource wQidle = sub.offer(wQavail, rc, totGuarant,
             isReservedPreemptionCandidatesSelector,
             allowQueuesBalanceAfterAllQueuesSatisfied);
         Resource wQdone = Resources.subtract(wQavail, wQidle);
 
+        // 如果当前TempQueue没有完全使用这次分配给他的资源，会将他重新加入到orderedByNeed中
         if (Resources.greaterThan(rc, totGuarant, wQdone, Resources.none())) {
           // The queue is still asking for more. Put it back in the priority
           // queue, recalculating its order based on need.
@@ -260,6 +270,7 @@ public class AbstractPreemptableResourceCalculator {
     // queue preemption will not try for any preemption. How ever there are
     // chances that within a queue, there are some imbalances. Hence make sure
     // all queues are added to list.
+    // 对于尚未分配好资源的需求队列，也会加到partitionToUnderServedQueues中
     while (!orderedByNeed.isEmpty()) {
       TempQueuePerPartition q1 = orderedByNeed.remove();
       context.addPartitionToUnderServedQueues(q1.queueName, q1.partition);

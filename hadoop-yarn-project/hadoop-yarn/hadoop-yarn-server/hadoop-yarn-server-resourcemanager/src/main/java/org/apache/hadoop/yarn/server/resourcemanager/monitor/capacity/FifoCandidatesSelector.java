@@ -69,6 +69,7 @@ public class FifoCandidatesSelector
     // Previous selectors (with higher priority) could have already
     // selected containers. We need to deduct preemptable resources
     // based on already selected candidates.
+    // 之前的Selector已经选择了一些可以抢占的container, 因此这里需要将这些container的资源从TempQueue中减去
     CapacitySchedulerPreemptionUtils
         .deductPreemptableResourcesBasedSelectedCandidates(preemptionContext,
             selectedCandidates);
@@ -98,6 +99,8 @@ public class FifoCandidatesSelector
       try {
         // go through all ignore-partition-exclusivity containers first to make
         // sure such containers will be preemptionCandidates first
+        // 首先抢占ignore-partition-exclusivity containers
+        // 这些container是没有标签要求的container运行在非默认标签(Non-exclusive)的节点上 ???
         Map<String, TreeSet<RMContainer>> ignorePartitionExclusivityContainers =
             leafQueue.getIgnoreExclusivityRMContainers();
         for (String partition : resToObtainByPartition.keySet()) {
@@ -106,6 +109,7 @@ public class FifoCandidatesSelector
                 ignorePartitionExclusivityContainers.get(partition);
             // We will check container from reverse order, so latter submitted
             // application's containers will be preemptionCandidates first.
+            // 按照降序抢占container
             for (RMContainer c : rmContainers.descendingSet()) {
               if (CapacitySchedulerPreemptionUtils.isContainerAlreadySelected(c,
                   selectedCandidates)) {
@@ -130,6 +134,7 @@ public class FifoCandidatesSelector
         Resource skippedAMSize = Resource.newInstance(0, 0);
         Iterator<FiCaSchedulerApp> desc =
             leafQueue.getOrderingPolicy().getPreemptionIterator();
+        // 按照优先级抢占任务，然后找到任务内的container并进行抢占，这个阶段AMContainer不会被抢占。
         while (desc.hasNext()) {
           FiCaSchedulerApp fc = desc.next();
           // When we complete preempt from one partition, we will remove from
