@@ -143,7 +143,7 @@ public class TempQueuePerPartition extends AbstractPreemptionEntity {
       boolean allowQueueBalanceAfterAllSafisfied) {
     Resource absMaxCapIdealAssignedDelta = Resources.componentwiseMax(
         Resources.subtract(getMax(), idealAssigned),
-        Resource.newInstance(0, 0));
+        Resource.newInstance(0, 0));      // 最大资源与理想资源的差值
     // accepted = min{avail,
     //               max - assigned,
     //               current + pending - assigned,
@@ -153,6 +153,8 @@ public class TempQueuePerPartition extends AbstractPreemptionEntity {
     //               # This is for leaf queue only.
     //               max(guaranteed, used) - assigned}
     // remain = avail - accepted
+    // aceepted为min(可用值，最大值减去ideal，当前使用+pending-ideal).
+    // 因此含义为对initIdealAssigned的一种约束，表示其不应该超过?????
     Resource accepted = Resources.componentwiseMin(
         absMaxCapIdealAssignedDelta,
         Resources.min(rc, clusterResource, avail, Resources
@@ -222,6 +224,7 @@ public class TempQueuePerPartition extends AbstractPreemptionEntity {
     return Resources.multiply(totalPartitionResource, absMaxCapacity);
   }
 
+  // 更新额外可抢占的资源
   public void updatePreemptableExtras(ResourceCalculator rc) {
     // Reset untouchableExtra and preemptableExtra
     untouchableExtra = Resources.none();

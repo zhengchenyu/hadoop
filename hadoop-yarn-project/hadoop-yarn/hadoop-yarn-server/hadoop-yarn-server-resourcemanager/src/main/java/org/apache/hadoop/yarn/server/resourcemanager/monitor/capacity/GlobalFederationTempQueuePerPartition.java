@@ -52,6 +52,7 @@ public class GlobalFederationTempQueuePerPartition
   private GlobalQueuesComparator comparator;
   private ResourceCalculator resourceCalculator;
 
+  // 子集群的idealAssigned ???
   Resource totalPartitionUnassigned; // this is passed by reference to track
   // globally
 

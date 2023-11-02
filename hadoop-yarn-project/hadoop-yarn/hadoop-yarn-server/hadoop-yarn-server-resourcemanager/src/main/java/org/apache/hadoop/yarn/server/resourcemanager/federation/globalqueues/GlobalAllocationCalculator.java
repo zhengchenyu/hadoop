@@ -44,9 +44,9 @@ public class GlobalAllocationCalculator {
    */
   public void computeOverallAllocation(FederationGlobalView global) {
 
-    FederationQueue root = global.getGlobal();
+    FederationQueue root = global.getGlobal();        // 这里为全局的queue, 即merge的一起的queue
     GlobalFederationTempQueuePerPartition rootAsTQ = GlobalQueuesConversionUtils
-        .getAsMergedTempQueuePerPartition(rc, global);
+        .getAsMergedTempQueuePerPartition(rc, global);      // 对所有subcluster进行merge得到的queue
 
     MinimalCSPreemptionContext context =
         new MinimalCSPreemptionContext(rootAsTQ, 0.0, 0.0, rc);
@@ -54,7 +54,7 @@ public class GlobalAllocationCalculator {
     FederationGlobalResourceCalculator prc =
         new FederationGlobalResourceCalculator(context, true);
 
-    prc.computeIdealAllocation(root.getTotCap(), root.getTotCap());
+    prc.computeIdealAllocation(root.getTotCap(), root.getTotCap());   // 第二个参数设置有误，应该为允许抢占的资源
 
     GlobalQueuesConversionUtils.updateIdealAlloc(rootAsTQ, global);
 

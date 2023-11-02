@@ -46,6 +46,8 @@ import org.slf4j.LoggerFactory;
 /**
  * This class represents a tree of queues in a sub-cluster YarnRM.
  * Useful to communicate with GPG and global policies.
+ * 代表一个子集群的Queue, 用于与GPG和Global Policies进行交流。
+ * 也可能会代表一个全局的Queue, 这是需要设置subClusterId为"global"
  */
 public class FederationQueue implements Iterable<FederationQueue> {
 

@@ -39,9 +39,9 @@ public class FederationGlobalView implements Cloneable {
   public static final Logger LOG =
       LoggerFactory.getLogger(FederationGlobalView.class);
 
-  private String name;
-  private FederationQueue global;
-  private List<FederationQueue> subClusters;
+  private String name;                            // 没有使用，可以删除掉
+  private FederationQueue global;                 // 全局的Queue, 即各个子集群的Queue
+  private List<FederationQueue> subClusters;      // 按照子集群维度的Queue
   private Configuration conf;
 
   public FederationGlobalView(){
@@ -135,6 +135,7 @@ public class FederationGlobalView implements Cloneable {
    */
   public void globalFromLocal() {
     // filling out the global object and propagating totCap
+    // 把当前所有子集群的FederationQueue(即subClusters)合并到一个id为"global"的FederationQueue中
     FederationQueue globalQueue = FederationQueue.mergeQueues(
         this.getSubClusters(), SubClusterId.newInstance("global"));
     Resource totCap =

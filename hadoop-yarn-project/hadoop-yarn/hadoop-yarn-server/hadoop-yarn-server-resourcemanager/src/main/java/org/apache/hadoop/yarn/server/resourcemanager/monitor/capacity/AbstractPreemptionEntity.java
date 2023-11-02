@@ -37,7 +37,7 @@ public class AbstractPreemptionEntity {
   protected Resource pending;
 
   // Following fields are settled and used by candidate selection policies
-  Resource idealAssigned;       // 这是理想的分配资源，因此是基于保证资源值根据集群实际使用情况得到理想的应该该当前队列分配的资源
+  Resource idealAssigned;       // 这是理想的分配资源，因此是基于保证资源值根据集群实际使用情况得到理想的应该该当前队列分配的资源.
   Resource toBePreempted;
   Resource selected;
   private Resource actuallyToBePreempted;
