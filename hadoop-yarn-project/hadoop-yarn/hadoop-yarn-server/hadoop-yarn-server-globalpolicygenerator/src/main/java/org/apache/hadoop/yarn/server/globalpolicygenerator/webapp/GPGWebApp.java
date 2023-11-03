@@ -17,10 +17,14 @@
 */
 package org.apache.hadoop.yarn.server.globalpolicygenerator.webapp;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.viewfs.ConfigUtil;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.GlobalPolicyGenerator;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.JAXBContextResolver;
 import org.apache.hadoop.yarn.webapp.GenericExceptionHandler;
 import org.apache.hadoop.yarn.webapp.WebApp;
+import org.apache.hadoop.yarn.webapp.WebApps;
+import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
 
 /**
  * The GPG webapp.
@@ -42,5 +46,15 @@ public class GPGWebApp extends WebApp {
     }
     route("/", GPGController.class, "overview");
     route("/policies", GPGController.class, "policies");
+    route("/scheduler", GPGController.class, "scheduler");
+  }
+
+  public static void main(String[] args) {
+    GlobalPolicyGenerator generator = new GlobalPolicyGenerator();
+    GPGWebApp gpgWebApp = new GPGWebApp(generator);
+    Configuration conf = new Configuration();
+    String webAppAddress = WebAppUtils.getGPGWebAppURLWithoutScheme(conf);
+    WebApp webApp = WebApps.$for("gpg").at(webAppAddress).start(gpgWebApp);
+    webApp.joinThread();
   }
 }

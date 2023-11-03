@@ -46,4 +46,9 @@ public class GPGController extends Controller {
     setTitle("Global Policy Generator Policies");
     render(GPGPoliciesPage.class);
   }
+
+  public void scheduler() {
+    setTitle("Queues");
+    render(GPGCapacitySchedulerPage.class);
+  }
 }

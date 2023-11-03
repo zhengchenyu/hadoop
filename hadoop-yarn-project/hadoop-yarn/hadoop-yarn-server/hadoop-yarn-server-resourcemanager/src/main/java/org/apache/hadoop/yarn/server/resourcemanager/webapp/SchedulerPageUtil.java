@@ -22,7 +22,7 @@ import org.apache.hadoop.yarn.webapp.view.HtmlBlock;
 
 public class SchedulerPageUtil {
 
-  static class QueueBlockUtil extends HtmlBlock {
+  static public class QueueBlockUtil extends HtmlBlock {
 
     private void reopenQueue(Block html) {
       html.
