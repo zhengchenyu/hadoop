@@ -5213,6 +5213,8 @@ public class YarnConfiguration extends Configuration {
    *  Depends on yarn.nodemanager.log.trigger.delete.by-size.enabled = true. */
   public static final String NM_LOG_DELETE_THRESHOLD = NM_PREFIX + "log.delete.threshold";
   public static final long DEFAULT_NM_LOG_DELETE_THRESHOLD = 100L * 1024 * 1024 * 1024;
+  public static final String FEDERATION_QUEUE_CAPACITY_RESOURCE_CALCULATOR_CLASS =
+      "yarn.federation.queue.capacity.resource-calculator";
 
   public YarnConfiguration() {
     super();

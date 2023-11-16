@@ -15,7 +15,7 @@
  * the License.
  */
 
-package org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues;
+package org.apache.hadoop.yarn.server.federation.globalqueues;
 
 import java.util.ArrayList;
 import java.util.List;

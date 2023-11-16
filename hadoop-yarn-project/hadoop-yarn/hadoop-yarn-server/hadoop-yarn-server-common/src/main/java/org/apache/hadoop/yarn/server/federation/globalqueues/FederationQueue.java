@@ -16,10 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues;
-
-import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.DEFAULT_RESOURCE_CALCULATOR_CLASS;
-import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.RESOURCE_CALCULATOR_CLASS;
+package org.apache.hadoop.yarn.server.federation.globalqueues;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -36,11 +33,14 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
+import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.FEDERATION_QUEUE_CAPACITY_RESOURCE_CALCULATOR_CLASS;
 
 
 /**
@@ -85,8 +85,8 @@ public class FederationQueue implements Iterable<FederationQueue> {
   public FederationQueue(Configuration conf) {
     this(conf,
         ReflectionUtils.newInstance(
-            conf.getClass(RESOURCE_CALCULATOR_CLASS,
-                DEFAULT_RESOURCE_CALCULATOR_CLASS, ResourceCalculator.class),
+            conf.getClass(FEDERATION_QUEUE_CAPACITY_RESOURCE_CALCULATOR_CLASS,
+                DefaultResourceCalculator.class, ResourceCalculator.class),
             conf));
   }
 
@@ -101,8 +101,8 @@ public class FederationQueue implements Iterable<FederationQueue> {
     this.conf = new Configuration();
     this.rc =
         ReflectionUtils.newInstance(
-            conf.getClass(RESOURCE_CALCULATOR_CLASS,
-                DEFAULT_RESOURCE_CALCULATOR_CLASS, ResourceCalculator.class),
+            conf.getClass(FEDERATION_QUEUE_CAPACITY_RESOURCE_CALCULATOR_CLASS,
+                DefaultResourceCalculator.class, ResourceCalculator.class),
             conf);
     this.queueName = queuename;
     this.subClusterId = subClusterId;

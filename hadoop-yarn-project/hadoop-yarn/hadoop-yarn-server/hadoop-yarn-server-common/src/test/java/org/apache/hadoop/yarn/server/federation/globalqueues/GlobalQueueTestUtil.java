@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues;
+package org.apache.hadoop.yarn.server.federation.globalqueues;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,7 +32,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
-import org.apache.hadoop.yarn.server.resourcemanager.federation.globalqueues.FederationQueue;
+import org.apache.hadoop.yarn.server.federation.globalqueues.FederationQueue;
 
 /**
  * This class provides support methods for all global queue tests.
