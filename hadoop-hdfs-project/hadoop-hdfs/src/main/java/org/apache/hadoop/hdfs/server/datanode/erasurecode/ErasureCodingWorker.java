@@ -139,7 +139,7 @@ public final class ErasureCodingWorker {
           //   1) NN will not send more tasks than what DN can execute and
           //   2) DN will not throw away reconstruction tasks, and instead keeps
           //      an unbounded number of tasks in the executor's task queue.
-          int xmitsSubmitted = Math.max((int)(task.getXmits() * xmitWeight), 1);
+          int xmitsSubmitted = Math.max((int)(task.getXmits() * xmitWeight), 1);      // 这里也可能抛异常
           getDatanode().incrementXmitsInProcess(xmitsSubmitted);
         } else {
           LOG.warn("No missing internal block. Skip reconstruction for task:{}",

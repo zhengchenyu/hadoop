@@ -517,7 +517,7 @@ public class DataNode extends ReconfigurableBase
     storageLocationChecker = null;
     volumeChecker = new DatasetVolumeChecker(conf, new Timer());
     this.xferService =
-        HadoopExecutors.newCachedThreadPool(new Daemon.DaemonFactory());
+        HadoopExecutors.newCachedThreadPool(new Daemon.DaemonFactory());      // 这个线程池的数目需要限制
     double congestionRationTmp = conf.getDouble(DFSConfigKeys.DFS_PIPELINE_CONGESTION_RATIO,
         DFSConfigKeys.DFS_PIPELINE_CONGESTION_RATIO_DEFAULT);
     this.congestionRatio = congestionRationTmp > 0 ?
@@ -565,7 +565,7 @@ public class DataNode extends ReconfigurableBase
 
     this.volumeChecker = new DatasetVolumeChecker(conf, new Timer());
     this.xferService =
-        HadoopExecutors.newCachedThreadPool(new Daemon.DaemonFactory());
+        HadoopExecutors.newCachedThreadPool(new Daemon.DaemonFactory());      // 这个线程池的数目需要限制
 
     // Determine whether we should try to pass file descriptors to clients.
     if (conf.getBoolean(HdfsClientConfigKeys.Read.ShortCircuit.KEY,

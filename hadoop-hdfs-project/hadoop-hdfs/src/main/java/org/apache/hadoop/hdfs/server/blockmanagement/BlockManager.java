@@ -388,7 +388,7 @@ public class BlockManager implements BlockStatsMXBean {
       new LowRedundancyBlocks();
 
   @VisibleForTesting
-  final PendingReconstructionBlocks pendingReconstruction;
+  final PendingReconstructionBlocks pendingReconstruction;      // 对于EC块，可能只是构造了ReplicationWork，但是没有将Command加入到DataNode中, 不应该计数。
 
   /** Stores information about block recovery attempts. */
   private final PendingRecoveryBlocks pendingRecoveryBlocks;
@@ -2142,7 +2142,7 @@ public class BlockManager implements BlockStatsMXBean {
             .size(); priority++) {
           for (BlockInfo block : blocksToReconstruct.get(priority)) {
             BlockReconstructionWork rw = scheduleReconstruction(block,
-                priority);
+                priority);      // 对于普通的block, 内部ReplicationWork会这里更新pendingReplicationWithoutTargets，会避免一次会放入过多的block。但是EC没有这个修改。
             if (rw != null) {
               reconWork.add(rw);
             }
@@ -2185,7 +2185,7 @@ public class BlockManager implements BlockStatsMXBean {
         }
 
         synchronized (neededReconstruction) {
-          if (validateReconstructionWork(rw)) {
+          if (validateReconstructionWork(rw)) {     // 这里会调用rw.addTaskToDatanode(numReplicas)，会造成过多的ec block加入到待拷贝列表。普通block没有这个问题，因为普通block使用pendingReplicationWithoutTargets来避免这个问题。
             scheduledWork++;
           }
         }
@@ -2396,7 +2396,7 @@ public class BlockManager implements BlockStatsMXBean {
     }
 
     // Add block to the datanode's task list
-    rw.addTaskToDatanode(numReplicas);
+    rw.addTaskToDatanode(numReplicas);          // TODO: 对于EC, 这里可能并没有增加work, 没有任何工作，但是后面却在计数
     DatanodeStorageInfo.incrementBlocksScheduled(targets);
 
     // Move the block-replication into a "pending" state.
@@ -2408,7 +2408,7 @@ public class BlockManager implements BlockStatsMXBean {
 
     int numEffectiveReplicas = numReplicas.liveReplicas() + pendingNum;
     // remove from neededReconstruction
-    if(numEffectiveReplicas + targets.length >= requiredRedundancy) {
+    if(numEffectiveReplicas + targets.length >= requiredRedundancy) {     // TODO: 这里的计算也可能不准确，因为这里并不能保证所有的targets都能构造对应的COMMAND
       neededReconstruction.remove(block, priority);
     }
     return true;

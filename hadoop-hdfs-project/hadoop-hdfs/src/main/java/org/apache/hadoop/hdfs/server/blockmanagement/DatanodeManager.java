@@ -1875,6 +1875,7 @@ public class DatanodeManager {
       } else {
         maxECReplicatedTransfers = maxTransfers;
       }
+      // maxECReplicatedTransfers通常大于maxTransfers，因此如果下线的机器上有大量的块，会卡主，导致普通块的复制变慢。
       int numReplicationTasks = (int) Math.ceil(
           (double) replicationBlocks * maxTransfers / totalBlocks);
       int numEcReplicatedTasks = (int) Math.ceil(

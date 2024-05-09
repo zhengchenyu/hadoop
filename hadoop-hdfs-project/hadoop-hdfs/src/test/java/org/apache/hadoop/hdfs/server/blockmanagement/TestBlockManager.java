@@ -2329,4 +2329,19 @@ public class TestBlockManager {
       DataNodeFaultInjector.set(oldInjector);
     }
   }
+
+  @Test
+  public void test() {
+    String[] strings = new String[5];
+    for (int i = 0; i < 5;i ++) {
+      strings[i] = "" + i;
+    }
+    strings[1] = null;
+    strings[2] = null;
+    for (String string : strings) {
+      if (string != null) {
+        System.out.println(string);
+      }
+    }
+  }
 }
