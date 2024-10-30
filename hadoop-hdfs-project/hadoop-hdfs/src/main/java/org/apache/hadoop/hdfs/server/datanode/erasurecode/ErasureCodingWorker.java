@@ -186,8 +186,6 @@ public final class ErasureCodingWorker {
   @VisibleForTesting
   public int getStripedReconstructionPoolSize() {
     int poolSize = this.stripedReconstructionPool.getCorePoolSize();
-    Preconditions.checkArgument(poolSize == this.stripedReconstructionPool.getMaximumPoolSize(),
-        "The maximum pool size should be equal to core pool size");
     return poolSize;
   }
 }
