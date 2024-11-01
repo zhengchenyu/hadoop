@@ -1157,4 +1157,93 @@ public class TestDecommissionWithStriped {
         originBytesArray, readBytesArray, ecPolicy);
     cleanupFile(dfs, ecFile);
   }
+
+  @Test(timeout = 120000)
+  public void testDecommissionBusyNodeWithErasureCodeWorkBackOff() throws Exception {
+    bm.setDecommissionECReconstruction(false);
+    byte index = 6;
+    // 1 create EC file
+    final Path ecFile = new Path(ecDir, "testDecommission2NodeWithBusyNode");
+    int writeBytes = cellSize * dataBlocks;
+    writeStripedFile(dfs, ecFile, writeBytes);
+
+    Assert.assertEquals(0, bm.numOfUnderReplicatedBlocks());
+    FileChecksum fileChecksum1 = dfs.getFileChecksum(ecFile, writeBytes);
+
+    // 2 make datanode busy
+    INodeFile fileNode =
+        cluster.getNamesystem().getFSDirectory().getINode4Write(ecFile.toString()).asFile();
+    BlockInfo firstBlock = fileNode.getBlocks()[0];
+    List<DatanodeStorageInfo> storageInfos =
+        getStorageInfoForBlockIndex((BlockInfoStriped) firstBlock, index);
+    assertEquals(1, storageInfos.size());
+    DatanodeDescriptor busyNode = storageInfos.get(0).getDatanodeDescriptor();
+    for (int j = 0; j < replicationStreamsHardLimit; j++) {
+      busyNode.incrementPendingReplicationWithoutTargets();
+    }
+    List<DatanodeStorageInfo> datanodeStorageInfos =
+        getStorageInfoForBlockIndex((BlockInfoStriped) firstBlock, index);
+    assertEquals(1, datanodeStorageInfos.size());
+    DatanodeStorageInfo toDecommissionStorage = datanodeStorageInfos.get(0);
+
+    // 3 decommissioning one datanode
+    List<DatanodeInfo> decommissionNodes = new ArrayList<>();
+    decommissionNodes.add(storageInfos.get(0).getDatanodeDescriptor());
+    decommissionNode(0, decommissionNodes, AdminStates.DECOMMISSION_INPROGRESS);
+
+    // 4 verify the replica is not copied or reconstructed
+    Thread.sleep(3000);
+    assertEquals(8, bm.countNodes(firstBlock).liveReplicas());
+    assertEquals(1, bm.countNodes(firstBlock).decommissioning());
+    assertEquals(0, cluster.getDataNodes().stream()
+        .mapToLong(dn -> dn.getMetrics().getECReconstructionTasks()).sum());
+
+    // 5 verify the replica is reconstructed
+    bm.setDecommissionECReconstruction(true);
+    decommissionNode(0, decommissionNodes, AdminStates.DECOMMISSIONED);
+    assertEquals(9, bm.countNodes(firstBlock).liveReplicas());
+    assertEquals(1, bm.countNodes(firstBlock).decommissioned());
+    assertTrue(cluster.getDataNodes().stream()
+        .mapToLong(dn -> dn.getMetrics().getECReconstructionTasks()).sum() > 0);
+
+    fileNode = cluster.getNamesystem().getFSDirectory().getINode(ecFile.toString()).asFile();
+    firstBlock = fileNode.getBlocks()[0];
+    datanodeStorageInfos = getStorageInfoForBlockIndex((BlockInfoStriped) firstBlock, index);
+    assertTrue(datanodeStorageInfos.size() >= 2);
+    DatanodeStorageInfo decommissionedNode = null;
+    int alive = 0;
+    for (int i = 0; i < datanodeStorageInfos.size();i ++) {
+      DatanodeStorageInfo datanodeStorageInfo = datanodeStorageInfos.get(i);
+      if (datanodeStorageInfo.getDatanodeDescriptor().isDecommissioned()) {
+        decommissionedNode = datanodeStorageInfo;
+      } else if (datanodeStorageInfo.getDatanodeDescriptor().isAlive()) {
+        alive++;
+      }
+    }
+    assertNotNull(decommissionedNode);
+    assertEquals(toDecommissionStorage, decommissionedNode);
+    assertTrue(alive >= 1);
+
+    // 6  check the checksum of a file
+    FileChecksum fileChecksum2 = dfs.getFileChecksum(ecFile, writeBytes);
+    Assert.assertEquals("Checksum mismatches!", fileChecksum1, fileChecksum2);
+
+    // 7 check the data is correct
+    StripedFileTestUtil.checkData(dfs, ecFile, writeBytes, decommissionNodes,
+        null, blockGroupSize);
+  }
+
+  private List<DatanodeStorageInfo> getStorageInfoForBlockIndex(BlockInfoStriped block,
+                                                                int blockIndex) {
+    List<DatanodeStorageInfo> storageInfos = new ArrayList<>();
+    Iterator<BlockInfoStriped.StorageAndBlockIndex> iterator =
+        block.getStorageAndIndexInfos().iterator();
+    while (iterator.hasNext()) {
+      BlockInfoStriped.StorageAndBlockIndex storageAndBlockIndex = iterator.next();
+      if (storageAndBlockIndex.getBlockIndex() == blockIndex) {
+        storageInfos.add(storageAndBlockIndex.getStorage());
+      }
+    }
+    return storageInfos;
+  }
 }
