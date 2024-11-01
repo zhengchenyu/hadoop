@@ -584,6 +584,10 @@ public class DataNodeMetrics {
     ecReconstructionTasks.incr();
   }
 
+  public long getECReconstructionTasks() {
+    return ecReconstructionTasks.value();
+  }
+
   public void incrECFailedReconstructionTasks() {
     ecFailedReconstructionTasks.incr();
   }
