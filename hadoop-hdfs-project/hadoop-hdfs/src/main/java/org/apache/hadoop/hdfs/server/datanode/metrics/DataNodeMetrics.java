@@ -351,6 +351,10 @@ public class DataNodeMetrics {
     blocksReplicated.incr();
   }
 
+  public long getBlocksReplicated() {
+    return blocksReplicated.value();
+  }
+
   public void incrBlocksWritten() {
     blocksWritten.incr();
   }
