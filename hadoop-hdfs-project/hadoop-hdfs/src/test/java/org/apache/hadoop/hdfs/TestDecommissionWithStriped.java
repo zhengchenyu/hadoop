@@ -63,7 +63,6 @@ import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.test.GenericTestUtils;
-import org.apache.hadoop.util.Lists;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -1215,7 +1214,7 @@ public class TestDecommissionWithStriped {
     assertTrue(newStorageInfos.size() >= 2);
     DatanodeStorageInfo decommissionedNode = null;
     int alive = 0;
-    for (int i = 0; i < newStorageInfos.size();i ++) {
+    for (int i = 0; i < newStorageInfos.size(); i++) {
       DatanodeStorageInfo datanodeStorageInfo = newStorageInfos.get(i);
       if (datanodeStorageInfo.getDatanodeDescriptor().isDecommissioned()) {
         decommissionedNode = datanodeStorageInfo;
@@ -1286,7 +1285,7 @@ public class TestDecommissionWithStriped {
     assertTrue(newStorageInfos.size() >= 4);
     int alive = 0;
     int decommissioned = 0;
-    for (int i = 0; i < newStorageInfos.size();i ++) {
+    for (int i = 0; i < newStorageInfos.size(); i++) {
       DatanodeStorageInfo newDatanodeStorageInfo = newStorageInfos.get(i);
       if (newDatanodeStorageInfo.getDatanodeDescriptor().isDecommissioned()) {
         assertTrue(newDatanodeStorageInfo.equals(storageInfos.get(0)) ||

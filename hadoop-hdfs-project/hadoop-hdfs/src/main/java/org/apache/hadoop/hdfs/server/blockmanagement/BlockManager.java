@@ -2310,7 +2310,8 @@ public class BlockManager implements BlockStatsMXBean {
       byte[] newIndices = new byte[liveBlockIndices.size()];
       adjustSrcNodesAndIndices((BlockInfoStriped)block,
           srcNodes, liveBlockIndices, newSrcNodes, newIndices);
-      byte[] liveAndDecommissioningBusyIndices = new byte[liveAndDecommissioningBusyBlockIndices.size()];
+      byte[] liveAndDecommissioningBusyIndices =
+          new byte[liveAndDecommissioningBusyBlockIndices.size()];
       for (int i = 0; i < liveAndDecommissioningBusyBlockIndices.size(); i++) {
         liveAndDecommissioningBusyIndices[i] = liveAndDecommissioningBusyBlockIndices.get(i);
       }
