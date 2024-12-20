@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer;
 import static org.apache.hadoop.fs.CreateFlag.CREATE;
 import static org.apache.hadoop.fs.CreateFlag.OVERWRITE;
 
+import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.yarn.exceptions.ConfigurationException;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.RecoveryIterator;
 import org.slf4j.Logger;
@@ -1016,6 +1017,17 @@ public class ResourceLocalizationService extends CompositeService
       } finally {
         LOG.info("Public cache exiting");
         threadPool.shutdownNow();
+        if ((ShutdownHookManager.get().isShutdownInProgress()) == false) {
+          Thread shutDownThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+              LOG.info("PublicLocalizer is missing. Exiting, bbye..");
+              System.exit(-1);
+            }
+          });
+          shutDownThread.setName("PublicLocalizer ShutDown handler");
+          shutDownThread.start();
+        }
       }
     }
 
