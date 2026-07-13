@@ -22,10 +22,9 @@ import java.util.*;
 import java.util.concurrent.ConcurrentSkipListSet;
 
 import org.apache.hadoop.classification.VisibleForTesting;
-
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
-import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
+import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 
 /**
  *
@@ -49,10 +48,17 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
   public static final String ENABLE_SIZE_BASED_WEIGHT =
         "fair.enable-size-based-weight";
 
+  public static final String ENABLE_PENDING_RESOURCE_FIRST =
+        "fair.enable-pending-resource-first";
+
   protected class FairComparator implements Comparator<SchedulableEntity> {
     @Override
     public int compare(final SchedulableEntity r1, final SchedulableEntity r2) {
-      int res = (int) Math.signum( getMagnitude(r1) - getMagnitude(r2) );
+      int res = comparePending(r1, r2);
+
+      if (res == 0) {
+        res = (int) Math.signum( getMagnitude(r1) - getMagnitude(r2) );
+      }
 
       if (res == 0) {
         res = (int) Math.signum(r1.getStartTime() - r2.getStartTime());
@@ -62,6 +68,23 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
         res = compareDemand(r1, r2);
       }
       return res;
+    }
+
+    private int comparePending(SchedulableEntity s1, SchedulableEntity s2) {
+      if (!pendingResourceFirst) {
+        return 0;
+      }
+
+      boolean hasPending1 = hasPendingResource(s1);
+      boolean hasPending2 = hasPendingResource(s2);
+
+      if (!hasPending1 && hasPending2) {
+        return 1;
+      } else if (hasPending1 && !hasPending2) {
+        return -1;
+      }
+
+      return 0;
     }
 
     private int compareDemand(SchedulableEntity s1, SchedulableEntity s2) {
@@ -84,6 +107,8 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
   private CompoundComparator fairComparator;
 
   private boolean sizeBasedWeight = false;
+
+  private boolean pendingResourceFirst = false;
 
   public FairOrderingPolicy() {
     List<Comparator<SchedulableEntity>> comparators =
@@ -126,6 +151,10 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
       sizeBasedWeight =
         Boolean.parseBoolean(conf.get(ENABLE_SIZE_BASED_WEIGHT));
     }
+    if (conf.containsKey(ENABLE_PENDING_RESOURCE_FIRST)) {
+      pendingResourceFirst =
+        Boolean.parseBoolean(conf.get(ENABLE_PENDING_RESOURCE_FIRST));
+    }
   }
 
   @Override
@@ -142,7 +171,7 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
 
   @Override
   public void demandUpdated(S schedulableEntity) {
-    if (sizeBasedWeight) {
+    if (sizeBasedWeight || pendingResourceFirst) {
       entityRequiresReordering(schedulableEntity);
     }
   }
@@ -150,12 +179,18 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
   @Override
   public String getInfo() {
     String sbw = sizeBasedWeight ? " with sizeBasedWeight" : "";
-    return "FairOrderingPolicy" + sbw;
+    String prf = pendingResourceFirst ? " with pendingResourceFirst" : "";
+    return "FairOrderingPolicy" + sbw + prf;
   }
 
   @Override
   public String getConfigName() {
     return CapacitySchedulerConfiguration.FAIR_APP_ORDERING_POLICY;
+  }
+
+  @Override
+  public boolean isPendingResourceFirst() {
+    return pendingResourceFirst;
   }
 
 }

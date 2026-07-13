@@ -105,6 +105,136 @@ public class TestFairOrderingPolicy {
   }
 
   @Test
+  public void testPendingResourceFirstDisabledByDefault() {
+    FairOrderingPolicy<MockSchedulableEntity> policy =
+        new FairOrderingPolicy<>();
+    MockSchedulableEntity withMoreUsedAndPending =
+        new MockSchedulableEntity();
+    MockSchedulableEntity withoutPending = new MockSchedulableEntity();
+
+    withMoreUsedAndPending.setUsed(Resources.createResource(4 * GB));
+    withMoreUsedAndPending.setPending(Resources.createResource(1 * GB));
+    withoutPending.setUsed(Resources.createResource(1 * GB));
+    withoutPending.setPending(Resources.none());
+
+    updateSchedulingResourceUsage(withMoreUsedAndPending);
+    updateSchedulingResourceUsage(withoutPending);
+
+    assertTrue(policy.getComparator()
+        .compare(withMoreUsedAndPending, withoutPending) > 0);
+  }
+
+  @Test
+  public void testPendingResourceFirstOrdersPendingAppsFirst() {
+    FairOrderingPolicy<MockSchedulableEntity> policy =
+        new FairOrderingPolicy<>();
+    Map<String, String> conf = new HashMap<>();
+    conf.put(FairOrderingPolicy.ENABLE_PENDING_RESOURCE_FIRST, "true");
+    policy.configure(conf);
+
+    MockSchedulableEntity withMoreUsedAndPending =
+        new MockSchedulableEntity();
+    MockSchedulableEntity withoutPending = new MockSchedulableEntity();
+
+    withMoreUsedAndPending.setUsed(Resources.createResource(4 * GB));
+    withMoreUsedAndPending.setPending(Resources.createResource(1 * GB));
+    withoutPending.setUsed(Resources.createResource(1 * GB));
+    withoutPending.setPending(Resources.none());
+
+    updateSchedulingResourceUsage(withMoreUsedAndPending);
+    updateSchedulingResourceUsage(withoutPending);
+
+    assertTrue(policy.isPendingResourceFirst());
+    assertTrue(policy.hasPendingResource(withMoreUsedAndPending));
+    assertTrue(policy.getComparator()
+        .compare(withMoreUsedAndPending, withoutPending) < 0);
+    assertTrue(policy.getComparator()
+        .compare(withoutPending, withMoreUsedAndPending) > 0);
+  }
+
+  @Test
+  public void testPendingResourceFirstKeepsFairOrderWithinSamePendingGroup() {
+    FairOrderingPolicy<MockSchedulableEntity> policy =
+        new FairOrderingPolicy<>();
+    Map<String, String> conf = new HashMap<>();
+    conf.put(FairOrderingPolicy.ENABLE_PENDING_RESOURCE_FIRST, "true");
+    policy.configure(conf);
+
+    MockSchedulableEntity lessUsed = new MockSchedulableEntity();
+    MockSchedulableEntity moreUsed = new MockSchedulableEntity();
+
+    lessUsed.setUsed(Resources.createResource(1 * GB));
+    lessUsed.setPending(Resources.createResource(1 * GB));
+    moreUsed.setUsed(Resources.createResource(4 * GB));
+    moreUsed.setPending(Resources.createResource(1 * GB));
+
+    updateSchedulingResourceUsage(lessUsed);
+    updateSchedulingResourceUsage(moreUsed);
+
+    assertTrue(policy.getComparator().compare(lessUsed, moreUsed) < 0);
+  }
+
+  @Test
+  public void testPendingResourceFirstUsesAllResourceTypes() {
+    FairOrderingPolicy<MockSchedulableEntity> policy =
+        new FairOrderingPolicy<>();
+    Map<String, String> conf = new HashMap<>();
+    conf.put(FairOrderingPolicy.ENABLE_PENDING_RESOURCE_FIRST, "true");
+    policy.configure(conf);
+
+    MockSchedulableEntity withOnlyVcorePending = new MockSchedulableEntity();
+    MockSchedulableEntity withoutPending = new MockSchedulableEntity();
+
+    withOnlyVcorePending.setPending(Resources.createResource(0, 1));
+    withoutPending.setPending(Resources.none());
+
+    updateSchedulingResourceUsage(withOnlyVcorePending);
+    updateSchedulingResourceUsage(withoutPending);
+
+    assertTrue(policy.hasPendingResource(withOnlyVcorePending));
+    assertTrue(policy.getComparator()
+        .compare(withOnlyVcorePending, withoutPending) < 0);
+  }
+
+  @Test
+  public void testDemandUpdatedReordersWhenPendingResourceFirstEnabled() {
+    FairOrderingPolicy<MockSchedulableEntity> policy =
+        new FairOrderingPolicy<>();
+    Map<String, String> conf = new HashMap<>();
+    conf.put(FairOrderingPolicy.ENABLE_PENDING_RESOURCE_FIRST, "true");
+    policy.configure(conf);
+
+    MockSchedulableEntity first = new MockSchedulableEntity();
+    first.setId("first");
+    first.setUsed(Resources.createResource(1 * GB));
+    first.setPending(Resources.none());
+
+    MockSchedulableEntity second = new MockSchedulableEntity();
+    second.setId("second");
+    second.setUsed(Resources.createResource(4 * GB));
+    second.setPending(Resources.none());
+
+    updateSchedulingResourceUsage(first);
+    updateSchedulingResourceUsage(second);
+    policy.addSchedulableEntity(first);
+    policy.addSchedulableEntity(second);
+
+    checkIds(policy.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR), new String[]{"first",
+            "second"});
+
+    second.setPending(Resources.createResource(1 * GB));
+    checkIds(policy.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR), new String[]{"first",
+            "second"});
+
+    policy.demandUpdated(second);
+    checkIds(policy.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR), new String[]{"second",
+            "first"});
+  }
+
+  @Test
   public void testIterators() {
     OrderingPolicy<MockSchedulableEntity> schedOrder =
      new FairOrderingPolicy<MockSchedulableEntity>();
@@ -158,6 +288,19 @@ public class TestFairOrderingPolicy {
 
   @Test
   public void testSizeBasedWeightNotAffectAppActivation() throws Exception {
+    assertFairOrderingPolicyDoesNotAffectAppActivation(
+        FairOrderingPolicy.ENABLE_SIZE_BASED_WEIGHT);
+  }
+
+  @Test
+  public void testPendingResourceFirstNotAffectAppActivation()
+      throws Exception {
+    assertFairOrderingPolicyDoesNotAffectAppActivation(
+        FairOrderingPolicy.ENABLE_PENDING_RESOURCE_FIRST);
+  }
+
+  private void assertFairOrderingPolicyDoesNotAffectAppActivation(
+      String policyParameter) throws Exception {
     CapacitySchedulerConfiguration csConf =
         new CapacitySchedulerConfiguration();
 
@@ -169,69 +312,56 @@ public class TestFairOrderingPolicy {
     csConf.setOrderingPolicy(queuePath,
         CapacitySchedulerConfiguration.FAIR_APP_ORDERING_POLICY);
     csConf.setOrderingPolicyParameter(queuePath,
-        FairOrderingPolicy.ENABLE_SIZE_BASED_WEIGHT, "true");
+        policyParameter, "true");
     csConf.setMaximumApplicationMasterResourcePerQueuePercent(queuePath, 0.1f);
 
     // inject node label manager
     MockRM rm = new MockRM(csConf);
-    rm.start();
+    try {
+      rm.start();
 
-    CapacityScheduler cs = (CapacityScheduler) rm.getResourceScheduler();
+      CapacityScheduler cs = (CapacityScheduler) rm.getResourceScheduler();
 
-    // Get LeafQueue
-    LeafQueue lq = (LeafQueue) cs.getQueue("default");
-    OrderingPolicy<FiCaSchedulerApp> policy = lq.getOrderingPolicy();
-    assertTrue(policy instanceof FairOrderingPolicy);
-    assertTrue(((FairOrderingPolicy<FiCaSchedulerApp>)policy).getSizeBasedWeight());
+      // Get LeafQueue
+      LeafQueue lq = (LeafQueue) cs.getQueue("default");
+      OrderingPolicy<FiCaSchedulerApp> policy = lq.getOrderingPolicy();
+      assertTrue(policy instanceof FairOrderingPolicy);
+      FairOrderingPolicy<FiCaSchedulerApp> fairPolicy =
+          (FairOrderingPolicy<FiCaSchedulerApp>) policy;
+      if (FairOrderingPolicy.ENABLE_SIZE_BASED_WEIGHT.equals(
+          policyParameter)) {
+        assertTrue(fairPolicy.getSizeBasedWeight());
+      } else {
+        assertTrue(fairPolicy.isPendingResourceFirst());
+      }
 
-    rm.registerNode("h1:1234", 10 * GB);
+      rm.registerNode("h1:1234", 10 * GB);
 
-    // Submit 4 apps
-    MockRMAppSubmissionData data3 =
-        MockRMAppSubmissionData.Builder.createWithMemory(1 * GB, rm)
-            .withAppName("app")
-            .withUser("user")
-            .withAcls(null)
-            .withQueue("default")
-            .withUnmanagedAM(false)
-            .build();
-    MockRMAppSubmitter.submit(rm, data3);
-    MockRMAppSubmissionData data2 =
-        MockRMAppSubmissionData.Builder.createWithMemory(1 * GB, rm)
-            .withAppName("app")
-            .withUser("user")
-            .withAcls(null)
-            .withQueue("default")
-            .withUnmanagedAM(false)
-            .build();
-    MockRMAppSubmitter.submit(rm, data2);
-    MockRMAppSubmissionData data1 =
-        MockRMAppSubmissionData.Builder.createWithMemory(1 * GB, rm)
-            .withAppName("app")
-            .withUser("user")
-            .withAcls(null)
-            .withQueue("default")
-            .withUnmanagedAM(false)
-            .build();
-    MockRMAppSubmitter.submit(rm, data1);
-    MockRMAppSubmissionData data =
-        MockRMAppSubmissionData.Builder.createWithMemory(1 * GB, rm)
-            .withAppName("app")
-            .withUser("user")
-            .withAcls(null)
-            .withQueue("default")
-            .withUnmanagedAM(false)
-            .build();
-    MockRMAppSubmitter.submit(rm, data);
+      // Submit 4 apps
+      for (int i = 0; i < 4; i++) {
+        MockRMAppSubmissionData data =
+            MockRMAppSubmissionData.Builder.createWithMemory(1 * GB, rm)
+                .withAppName("app")
+                .withUser("user")
+                .withAcls(null)
+                .withQueue("default")
+                .withUnmanagedAM(false)
+                .build();
+        MockRMAppSubmitter.submit(rm, data);
+      }
 
-    assertEquals(1, lq.getNumActiveApplications());
-    assertEquals(3, lq.getNumPendingApplications());
+      assertEquals(1, lq.getNumActiveApplications());
+      assertEquals(3, lq.getNumPendingApplications());
 
-    // Try allocate once, #active-apps and #pending-apps should be still correct
-    cs.handle(new NodeUpdateSchedulerEvent(
-        rm.getRMContext().getRMNodes().get(NodeId.newInstance("h1", 1234))));
-    assertEquals(1, lq.getNumActiveApplications());
-    assertEquals(3, lq.getNumPendingApplications());
+      // Try allocate once, #active-apps and #pending-apps should be still
+      // correct.
+      cs.handle(new NodeUpdateSchedulerEvent(
+          rm.getRMContext().getRMNodes().get(NodeId.newInstance("h1", 1234))));
+      assertEquals(1, lq.getNumActiveApplications());
+      assertEquals(3, lq.getNumPendingApplications());
+    } finally {
+      rm.close();
+    }
   }
 
   public void checkIds(Iterator<MockSchedulableEntity> si,
@@ -239,6 +369,11 @@ public class TestFairOrderingPolicy {
     for (int i = 0;i < ids.length;i++) {
       assertEquals(si.next().getId(), ids[i]);
     }
+  }
+
+  private void updateSchedulingResourceUsage(MockSchedulableEntity entity) {
+    AbstractComparatorOrderingPolicy.updateSchedulingResourceUsage(
+        entity.getSchedulingResourceUsage());
   }
 
   @Test

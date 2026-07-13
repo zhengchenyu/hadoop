@@ -1463,21 +1463,22 @@ public abstract class AbstractYarnScheduler
     }
   }
 
-  protected void handleContainerUpdates(
+  protected boolean handleContainerUpdates(
       SchedulerApplicationAttempt appAttempt, ContainerUpdates updates) {
+    boolean demandUpdated = false;
     List<UpdateContainerRequest> promotionRequests =
         updates.getPromotionRequests();
     if (promotionRequests != null && !promotionRequests.isEmpty()) {
       LOG.info("Promotion Update requests : " + promotionRequests);
       // Promotion is technically an increase request from
       // 0 resources to target resources.
-      handleIncreaseRequests(appAttempt, promotionRequests);
+      demandUpdated |= handleIncreaseRequests(appAttempt, promotionRequests);
     }
     List<UpdateContainerRequest> increaseRequests =
         updates.getIncreaseRequests();
     if (increaseRequests != null && !increaseRequests.isEmpty()) {
       LOG.info("Resource increase requests : " + increaseRequests);
-      handleIncreaseRequests(appAttempt, increaseRequests);
+      demandUpdated |= handleIncreaseRequests(appAttempt, increaseRequests);
     }
     List<UpdateContainerRequest> demotionRequests =
         updates.getDemotionRequests();
@@ -1491,13 +1492,15 @@ public abstract class AbstractYarnScheduler
         updates.getDecreaseRequests();
     if (decreaseRequests != null && !decreaseRequests.isEmpty()) {
       LOG.info("Resource decrease requests : " + decreaseRequests);
-      handleDecreaseRequests(appAttempt, decreaseRequests);
+      demandUpdated |= handleDecreaseRequests(appAttempt, decreaseRequests);
     }
+    return demandUpdated;
   }
 
-  private void handleIncreaseRequests(
+  private boolean handleIncreaseRequests(
       SchedulerApplicationAttempt applicationAttempt,
       List<UpdateContainerRequest> updateContainerRequests) {
+    boolean demandUpdated = false;
     for (UpdateContainerRequest uReq : updateContainerRequests) {
       RMContainer rmContainer =
           rmContext.getScheduler().getRMContainer(uReq.getContainerId());
@@ -1517,16 +1520,20 @@ public abstract class AbstractYarnScheduler
           applicationAttempt.addToUpdateContainerErrors(
               UpdateContainerError.newInstance(
               RMServerUtils.UPDATE_OUTSTANDING_ERROR, uReq));
+        } else {
+          demandUpdated = true;
         }
       } else {
         LOG.warn("Cannot promote non-existent (or completed) Container ["
             + uReq.getContainerId() + "]");
       }
     }
+    return demandUpdated;
   }
 
-  private void handleDecreaseRequests(SchedulerApplicationAttempt appAttempt,
+  private boolean handleDecreaseRequests(SchedulerApplicationAttempt appAttempt,
       List<UpdateContainerRequest> demotionRequests) {
+    boolean demandUpdated = false;
     OpportunisticContainerContext oppCntxt =
         appAttempt.getOpportunisticContainerContext();
     for (UpdateContainerRequest uReq : demotionRequests) {
@@ -1549,6 +1556,7 @@ public abstract class AbstractYarnScheduler
                       uReq.getContainerId(), demotedRMContainer);
             }
           } else {
+            demandUpdated = true;
             RMContainer demotedRMContainer = createDecreasedRMContainer(
                 appAttempt, uReq, rmContainer);
             appAttempt.addToNewlyDecreasedContainers(
@@ -1564,6 +1572,7 @@ public abstract class AbstractYarnScheduler
             "Container [" + uReq.getContainerId() + "]");
       }
     }
+    return demandUpdated;
   }
 
   private RMContainer createDecreasedRMContainer(

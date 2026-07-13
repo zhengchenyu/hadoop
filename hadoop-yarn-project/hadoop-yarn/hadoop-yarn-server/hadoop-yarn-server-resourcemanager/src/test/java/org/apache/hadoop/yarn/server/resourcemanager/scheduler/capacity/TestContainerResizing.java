@@ -46,6 +46,7 @@ import org.apache.hadoop.yarn.api.records.UpdatedContainer;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.DrainDispatcher;
+import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.MockAM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
@@ -70,6 +71,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica
     .FiCaSchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeUpdateSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.placement.CandidateNodeSet;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy.FairOrderingPolicy;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy.IteratorSelector;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -176,6 +179,87 @@ public class TestContainerResizing {
     verifyAvailableResourceOfSchedulerNode(rm1, nm1.getNodeId(), 17 * GB);
 
     rm1.close();
+  }
+
+  @Test
+  public void testIncreaseRequestUpdatesFairOrderingPolicyDemand()
+      throws Exception {
+    CapacitySchedulerConfiguration csConf =
+        new CapacitySchedulerConfiguration(conf);
+    QueuePath defaultQueue = new QueuePath(
+        CapacitySchedulerConfiguration.ROOT + ".default");
+    csConf.setOrderingPolicy(defaultQueue,
+        CapacitySchedulerConfiguration.FAIR_APP_ORDERING_POLICY);
+    csConf.setOrderingPolicyParameter(defaultQueue,
+        FairOrderingPolicy.ENABLE_PENDING_RESOURCE_FIRST, "true");
+
+    MockRM rm1 = new MockRM(csConf) {
+      @Override
+      public RMNodeLabelsManager createNodeLabelManager() {
+        return mgr;
+      }
+    };
+    try {
+      rm1.start();
+      MockNM nm1 = rm1.registerNode("h1:1234", 20 * GB);
+
+      MockRMAppSubmissionData data =
+          MockRMAppSubmissionData.Builder.createWithMemory(1 * GB, rm1)
+              .withAppName("app")
+              .withUser("user")
+              .withAcls(null)
+              .withQueue("default")
+              .withUnmanagedAM(false)
+              .build();
+      RMApp app1 = MockRMAppSubmitter.submit(rm1, data);
+      MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
+      CapacityScheduler cs = (CapacityScheduler) rm1.getResourceScheduler();
+      LeafQueue defaultLeafQueue = (LeafQueue) cs.getQueue("default");
+      FiCaSchedulerApp app = TestUtils.getFiCaSchedulerApp(
+          rm1, app1.getApplicationId());
+
+      assertTrue(defaultLeafQueue.getOrderingPolicy().isPendingResourceFirst());
+
+      ContainerId containerId1 =
+          ContainerId.newContainerId(am1.getApplicationAttemptId(), 1);
+      sentRMContainerLaunched(rm1, containerId1);
+
+      am1.sendContainerResizingRequest(Arrays.asList(
+          UpdateContainerRequest.newInstance(0, containerId1,
+              ContainerUpdateType.INCREASE_RESOURCE,
+              Resources.createResource(3 * GB), null)));
+
+      assertEquals(2 * GB,
+          app.getAppAttemptResourceUsage().getPending().getMemorySize());
+      assertEquals(1 * GB,
+          app.getSchedulingResourceUsage()
+              .getCachedPending(CommonNodeLabelsManager.ANY).getMemorySize());
+
+      defaultLeafQueue.getOrderingPolicy().getAssignmentIterator(
+          IteratorSelector.EMPTY_ITERATOR_SELECTOR);
+      assertEquals(2 * GB,
+          app.getSchedulingResourceUsage()
+              .getCachedPending(CommonNodeLabelsManager.ANY).getMemorySize());
+
+      am1.sendContainerResizingRequest(Arrays.asList(
+          UpdateContainerRequest.newInstance(0, containerId1,
+              ContainerUpdateType.INCREASE_RESOURCE,
+              Resources.createResource(1 * GB), null)));
+
+      assertEquals(0,
+          app.getAppAttemptResourceUsage().getPending().getMemorySize());
+      assertEquals(2 * GB,
+          app.getSchedulingResourceUsage()
+              .getCachedPending(CommonNodeLabelsManager.ANY).getMemorySize());
+
+      defaultLeafQueue.getOrderingPolicy().getAssignmentIterator(
+          IteratorSelector.EMPTY_ITERATOR_SELECTOR);
+      assertEquals(0,
+          app.getSchedulingResourceUsage()
+              .getCachedPending(CommonNodeLabelsManager.ANY).getMemorySize());
+    } finally {
+      rm1.close();
+    }
   }
 
   @Test

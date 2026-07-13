@@ -76,6 +76,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaS
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.placement.CandidateNodeSet;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.placement.CandidateNodeSetUtils;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy.AbstractComparatorOrderingPolicy;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy.FifoOrderingPolicyForPendingApps;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy.IteratorSelector;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy.OrderingPolicy;
@@ -924,6 +925,12 @@ public class AbstractLeafQueue extends AbstractCSQueue {
           }
         }
         user.activateApplication();
+        if (orderingPolicy.isPendingResourceFirst()) {
+          // Pending apps do not update the active ordering policy. Refresh
+          // cached usage before inserting the app into the active ordering set.
+          AbstractComparatorOrderingPolicy.updateSchedulingResourceUsage(
+              application.getSchedulingResourceUsage());
+        }
         orderingPolicy.addSchedulableEntity(application);
         application.updateAMContainerDiagnostics(AMState.ACTIVATED, null);
 
@@ -1217,6 +1224,10 @@ public class AbstractLeafQueue extends AbstractCSQueue {
         continue;
       }
 
+      if (shouldStopAssigningToApp(application)) {
+        break;
+      }
+
       ActivitiesLogger.APP.startAppAllocationRecording(activitiesManager,
           node, SystemClock.getInstance().getTime(), application);
 
@@ -1341,6 +1352,11 @@ public class AbstractLeafQueue extends AbstractCSQueue {
         ActivityDiagnosticConstant.EMPTY);
 
     return CSAssignment.NULL_ASSIGNMENT;
+  }
+
+  private boolean shouldStopAssigningToApp(FiCaSchedulerApp application) {
+    return orderingPolicy.isPendingResourceFirst()
+        && !orderingPolicy.hasPendingResource(application);
   }
 
   @Override
@@ -2363,6 +2379,16 @@ public class AbstractLeafQueue extends AbstractCSQueue {
 
   public OrderingPolicy<FiCaSchedulerApp> getOrderingPolicy() {
     return orderingPolicy;
+  }
+
+  boolean isActiveApplicationAttempt(FiCaSchedulerApp application) {
+    // TODO: remove read lock.
+    readLock.lock();
+    try {
+      return orderingPolicy.getSchedulableEntities().contains(application);
+    } finally {
+      readLock.unlock();
+    }
   }
 
   void setOrderingPolicy(

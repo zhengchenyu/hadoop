@@ -1338,13 +1338,15 @@ public class CapacityScheduler extends
       return EMPTY_ALLOCATION;
     }
 
+    AbstractLeafQueue updateDemandForQueue = null;
+
     // Handle all container updates
-    handleContainerUpdates(application, updateRequests);
+    if (handleContainerUpdates(application, updateRequests)) {
+      updateDemandForQueue = (AbstractLeafQueue) application.getQueue();
+    }
 
     // Release containers
     releaseContainers(release, application);
-
-    AbstractLeafQueue updateDemandForQueue = null;
 
     // Sanity check for new allocation requests
     normalizeResourceRequests(ask);
@@ -1396,8 +1398,8 @@ public class CapacityScheduler extends
       application.getWriteLock().unlock();
     }
 
-    if (updateDemandForQueue != null && !application
-        .isWaitingForAMContainer()) {
+    if (updateDemandForQueue != null
+        && updateDemandForQueue.isActiveApplicationAttempt(application)) {
       updateDemandForQueue.getOrderingPolicy().demandUpdated(application);
     }
 

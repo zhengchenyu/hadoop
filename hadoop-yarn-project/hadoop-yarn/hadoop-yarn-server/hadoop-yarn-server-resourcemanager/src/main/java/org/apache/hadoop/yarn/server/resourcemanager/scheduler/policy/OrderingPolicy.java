@@ -19,7 +19,9 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy;
 
 import java.util.*;
+import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
+import org.apache.hadoop.yarn.util.resource.Resources;
 
 
 /**
@@ -122,6 +124,25 @@ public interface OrderingPolicy<S extends SchedulableEntity> {
    * @param schedulableEntity the updated {@link SchedulableEntity}
    */
   void demandUpdated(S schedulableEntity);
+
+  /**
+   * Return whether this policy orders applications with pending resources
+   * before applications without pending resources.
+   * @return true if applications with pending resources should be ordered first
+   */
+  default boolean isPendingResourceFirst() {
+    return false;
+  }
+
+  /**
+   * Return whether the {@link SchedulableEntity} has pending resources.
+   * @param schedulableEntity the {@link SchedulableEntity}
+   * @return true if there are pending resources
+   */
+  default boolean hasPendingResource(SchedulableEntity schedulableEntity) {
+    return !Resources.isNone(schedulableEntity.getSchedulingResourceUsage()
+        .getCachedPending(CommonNodeLabelsManager.ANY));
+  }
 
   /**
    * Return information regarding configuration and status.

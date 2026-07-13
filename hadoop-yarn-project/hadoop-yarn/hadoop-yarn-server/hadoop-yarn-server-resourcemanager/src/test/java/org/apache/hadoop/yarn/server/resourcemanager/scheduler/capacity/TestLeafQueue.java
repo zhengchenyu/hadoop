@@ -36,7 +36,10 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -82,6 +85,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
+import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 import org.apache.hadoop.yarn.security.AccessType;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
@@ -112,6 +116,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.preempti
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.ResourceCommitRequest;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerApp;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.placement.CandidateNodeSet;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAddedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptAddedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptRemovedSchedulerEvent;
@@ -659,6 +664,16 @@ public class TestLeafQueue {
       testConf.<FiCaSchedulerApp>getAppOrderingPolicy(tproot);
     fop = (FairOrderingPolicy<FiCaSchedulerApp>) schedOrder;
     assertTrue(fop.getSizeBasedWeight());
+
+    String pendingResourceFirstConfig =
+        CapacitySchedulerConfiguration.PREFIX + tproot + "."
+            + CapacitySchedulerConfiguration.ORDERING_POLICY + "."
+            + FairOrderingPolicy.ENABLE_PENDING_RESOURCE_FIRST;
+    testConf.set(pendingResourceFirstConfig, "true");
+    schedOrder =
+        testConf.<FiCaSchedulerApp>getAppOrderingPolicy(tproot);
+    fop = (FairOrderingPolicy<FiCaSchedulerApp>) schedOrder;
+    assertTrue(fop.isPendingResourceFirst());
 
   }
 
@@ -4536,6 +4551,160 @@ public class TestLeafQueue {
         SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY), a, nodes, apps);
     assertEquals(3*GB, app_0.getCurrentConsumption().getMemorySize());
 
+  }
+
+  @Test
+  public void testFairActivationRefreshesPendingResourceForPendingFirst()
+      throws Exception {
+    LeafQueue a = stubLeafQueue((LeafQueue)queues.get(A));
+    Map<String, String> conf = new HashMap<String, String>();
+    conf.put(FairOrderingPolicy.ENABLE_PENDING_RESOURCE_FIRST, "true");
+    OrderingPolicy<FiCaSchedulerApp> schedulingOrder =
+        new FairOrderingPolicy<FiCaSchedulerApp>();
+    schedulingOrder.configure(conf);
+    a.setOrderingPolicy(schedulingOrder);
+
+    final int numNodes = 4;
+    Resource clusterResource = Resources.createResource(numNodes * (16 * GB),
+        numNodes * 16);
+    when(csContext.getNumClusterNodes()).thenReturn(numNodes);
+    root.updateClusterResource(clusterResource,
+        new ResourceLimits(clusterResource));
+
+    FiCaSchedulerApp app_0 = createApp(a, "user_0", 0);
+    app_0.getSchedulingResourceUsage().setPending(
+        CommonNodeLabelsManager.NO_LABEL, Resources.createResource(1 * GB, 1));
+
+    assertFalse(a.getOrderingPolicy().hasPendingResource(app_0));
+
+    a.submitApplicationAttempt(app_0, "user_0");
+
+    assertTrue(a.getOrderingPolicy().hasPendingResource(app_0));
+  }
+
+  @Test
+  public void testFairAssignmentStopsAtFirstAppWithoutPending()
+      throws Exception {
+    LeafQueue a = stubLeafQueue((LeafQueue)queues.get(A));
+    Map<String, String> conf = new HashMap<String, String>();
+    conf.put(FairOrderingPolicy.ENABLE_PENDING_RESOURCE_FIRST, "true");
+    OrderingPolicy<FiCaSchedulerApp> schedulingOrder =
+        new FairOrderingPolicy<FiCaSchedulerApp>();
+    schedulingOrder.configure(conf);
+    a.setOrderingPolicy(schedulingOrder);
+
+    String host_0_0 = "127.0.0.1";
+    String rack_0 = "rack_0";
+    FiCaSchedulerNode node_0_0 = TestUtils.getMockNode(host_0_0, rack_0, 0,
+        16 * GB);
+
+    final int numNodes = 4;
+    Resource clusterResource = Resources.createResource(numNodes * (16 * GB),
+        numNodes * 16);
+    when(csContext.getNumClusterNodes()).thenReturn(numNodes);
+    root.updateClusterResource(clusterResource,
+        new ResourceLimits(clusterResource));
+
+    String user_0 = "user_0";
+
+    FiCaSchedulerApp app_0 = createApp(a, user_0, 0);
+    FiCaSchedulerApp app_1 = createApp(a, user_0, 1);
+    FiCaSchedulerApp app_2 = createApp(a, user_0, 2);
+    a.submitApplicationAttempt(app_0, user_0);
+    a.submitApplicationAttempt(app_1, user_0);
+    a.submitApplicationAttempt(app_2, user_0);
+
+    a.incPendingResource("", Resources.createResource(1 * GB, 1));
+    app_0.getSchedulingResourceUsage().setCachedPending(
+        CommonNodeLabelsManager.ANY,
+        Resources.createResource(1 * GB, 1));
+    app_1.getSchedulingResourceUsage().setCachedPending(
+        CommonNodeLabelsManager.ANY, Resources.none());
+    app_2.getSchedulingResourceUsage().setCachedPending(
+        CommonNodeLabelsManager.ANY, Resources.none());
+
+    doReturn(CSAssignment.SKIP_ASSIGNMENT).when(app_0).assignContainers(
+        any(Resource.class), any(CandidateNodeSet.class),
+        any(ResourceLimits.class), any(SchedulingMode.class), any());
+    doReturn(CSAssignment.SKIP_ASSIGNMENT).when(app_1).assignContainers(
+        any(Resource.class), any(CandidateNodeSet.class),
+        any(ResourceLimits.class), any(SchedulingMode.class), any());
+    doReturn(CSAssignment.SKIP_ASSIGNMENT).when(app_2).assignContainers(
+        any(Resource.class), any(CandidateNodeSet.class),
+        any(ResourceLimits.class), any(SchedulingMode.class), any());
+
+    a.assignContainers(clusterResource, node_0_0,
+        new ResourceLimits(clusterResource),
+        SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY);
+
+    verify(app_0, times(1)).assignContainers(
+        any(Resource.class), any(CandidateNodeSet.class),
+        any(ResourceLimits.class), any(SchedulingMode.class), any());
+    verify(app_1, never()).assignContainers(
+        any(Resource.class), any(CandidateNodeSet.class),
+        any(ResourceLimits.class), any(SchedulingMode.class), any());
+    verify(app_2, never()).assignContainers(
+        any(Resource.class), any(CandidateNodeSet.class),
+        any(ResourceLimits.class), any(SchedulingMode.class), any());
+  }
+
+  @Test
+  public void testFairAssignmentContinuesWhenPendingFirstIsDisabled()
+      throws Exception {
+    LeafQueue a = stubLeafQueue((LeafQueue)queues.get(A));
+    a.setOrderingPolicy(new FairOrderingPolicy<FiCaSchedulerApp>());
+
+    String host_0_0 = "127.0.0.1";
+    String rack_0 = "rack_0";
+    FiCaSchedulerNode node_0_0 = TestUtils.getMockNode(host_0_0, rack_0, 0,
+        16 * GB);
+
+    final int numNodes = 4;
+    Resource clusterResource = Resources.createResource(numNodes * (16 * GB),
+        numNodes * 16);
+    when(csContext.getNumClusterNodes()).thenReturn(numNodes);
+    root.updateClusterResource(clusterResource,
+        new ResourceLimits(clusterResource));
+
+    String user_0 = "user_0";
+
+    FiCaSchedulerApp app_0 = createApp(a, user_0, 0);
+    FiCaSchedulerApp app_1 = createApp(a, user_0, 1);
+    a.submitApplicationAttempt(app_0, user_0);
+    a.submitApplicationAttempt(app_1, user_0);
+
+    a.incPendingResource("", Resources.createResource(1 * GB, 1));
+    app_0.getSchedulingResourceUsage().setCachedPending(
+        CommonNodeLabelsManager.ANY,
+        Resources.createResource(1 * GB, 1));
+    app_1.getSchedulingResourceUsage().setCachedPending(
+        CommonNodeLabelsManager.ANY, Resources.none());
+
+    doReturn(CSAssignment.SKIP_ASSIGNMENT).when(app_0).assignContainers(
+        any(Resource.class), any(CandidateNodeSet.class),
+        any(ResourceLimits.class), any(SchedulingMode.class), any());
+    doReturn(CSAssignment.SKIP_ASSIGNMENT).when(app_1).assignContainers(
+        any(Resource.class), any(CandidateNodeSet.class),
+        any(ResourceLimits.class), any(SchedulingMode.class), any());
+
+    a.assignContainers(clusterResource, node_0_0,
+        new ResourceLimits(clusterResource),
+        SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY);
+
+    verify(app_0, times(1)).assignContainers(
+        any(Resource.class), any(CandidateNodeSet.class),
+        any(ResourceLimits.class), any(SchedulingMode.class), any());
+    verify(app_1, times(1)).assignContainers(
+        any(Resource.class), any(CandidateNodeSet.class),
+        any(ResourceLimits.class), any(SchedulingMode.class), any());
+  }
+
+  private FiCaSchedulerApp createApp(LeafQueue queue, String user,
+      int applicationId) {
+    ApplicationAttemptId appAttemptId =
+        TestUtils.getMockApplicationAttemptId(applicationId, 0);
+    return spy(new FiCaSchedulerApp(appAttemptId, user, queue,
+        mock(ActiveUsersManager.class), spyRMContext));
   }
   
   @Test
